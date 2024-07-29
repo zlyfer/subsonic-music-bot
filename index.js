@@ -52,8 +52,74 @@ const commands = [
     description: "Joins the voice channel you are in and plays the first starred song.",
   },
   {
-    name: "join",
-    description: "Joins the voice channel you are in.",
+    name: "search",
+    description: "Search for a song.",
+    options: [
+      {
+        name: "query",
+        description: "Enter a search query.",
+        type: 3,
+        required: true,
+      },
+    ],
+  },
+  {
+    name: "play",
+    description: "Play a song.",
+    options: [
+      {
+        name: "query",
+        description: "Enter a search query.",
+        type: 3,
+        required: true,
+      },
+    ],
+  },
+  {
+    name: "pause",
+    description: "Pause the current song.",
+  },
+  {
+    name: "stop",
+    description: "Stop the current song.",
+  },
+  {
+    name: "skip",
+    description: "Skip the current song.",
+  },
+  {
+    name: "show-queue",
+    description: "Show the current queue.",
+  },
+  {
+    name: "clear-queue",
+    description: "Clear the current queue.",
+  },
+  {
+    name: "autoplay",
+    description: "Toggle autoplay.",
+    options: [
+      {
+        name: "mode",
+        type: 3,
+        choices: [
+          {
+            name: "None",
+            value: "none",
+          },
+          {
+            name: "Random",
+            value: "random",
+          },
+          {
+            name: "Similar",
+            value: "similar",
+          },
+        ],
+        description: "Enable or disable autoplay.",
+        required: true,
+      },
+    ],
   },
 ];
 
@@ -90,7 +156,6 @@ client.on("interactionCreate", async (interaction) => {
       case "autoplay":
       default:
         await interaction.reply("This command is not implemented yet.");
-
         break;
     }
   } catch (error) {
