@@ -32,10 +32,19 @@ class SubsonicApi {
     return this.subsonicClient.media.stream({ id });
   }
 
+  getCoverById(id) {
+    return this.subsonicClient.media.getCoverArt({ id });
+  }
+
   /* ------------ Playlists ----------- */
   /* ------------ PlayQueue ----------- */
   /* ------------ Podcasts ------------ */
   /* ------------ Searching ----------- */
+
+  search(query, songCount) {
+    return this.subsonicClient.searching.search3({ query, songCount });
+  }
+
   /* ------------- Sharing ------------ */
   /* ------------- System ------------- */
   /* -------------- User -------------- */

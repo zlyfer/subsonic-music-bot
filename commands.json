@@ -4,25 +4,14 @@
       "name": "debug",
       "description": "Joins the voice channel you are in and plays the first starred song."
     },
-    {
-      "name": "search",
-      "description": "Search for a song.",
-      "options": [
-        {
-          "name": "query",
-          "description": "Enter a search query.",
-          "type": 3,
-          "required": true
-        }
-      ]
-    },
+
     {
       "name": "play",
-      "description": "Continue playback or play a new song.",
+      "description": "Play a song or add one to the queue.",
       "options": [
         {
           "name": "query",
-          "description": "Enter a search query.",
+          "description": "Enter a song title.",
           "type": 3,
           "required": true
         }
@@ -38,7 +27,49 @@
     },
     {
       "name": "stop",
-      "description": "Stop the current song."
+      "description": "Stop the current song.",
+      "options": [
+        {
+          "name": "leave-voice",
+          "description": "Wheter or not to leave the voice channel.",
+          "type": 5,
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "join",
+      "description": "Join a voice channel.",
+      "options": [
+        {
+          "name": "channel",
+          "description": "Enter a voice channel. (Leave empty to join your current voice channel.)",
+          "type": 7,
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "leave",
+      "description": "Leave the voice channel."
+    },
+    {
+      "name": "search",
+      "description": "Search for a song.",
+      "options": [
+        {
+          "name": "query",
+          "description": "Enter a search query.",
+          "type": 3,
+          "required": true
+        },
+        {
+          "name": "count",
+          "description": "Total number of search results to show. (default: 50)",
+          "type": 4,
+          "required": false
+        }
+      ]
     },
     {
       "name": "skip",

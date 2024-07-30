@@ -7,15 +7,23 @@ class Player {
     /* ------------- Events ------------- */
 
     this.player.on(AudioPlayerStatus.Playing, () => {
-      console.log("The audio player has started playing!");
+      console.info("The audio player has started playing!");
+    });
+
+    this.player.on(AudioPlayerStatus.Paused, () => {
+      console.info("The audio player has been paused.");
+    });
+
+    this.player.on(AudioPlayerStatus.AutoPaused, () => {
+      console.info("The audio player has been automatically paused.");
     });
 
     this.player.on(AudioPlayerStatus.Idle, () => {
-      console.log("The audio player is idle.");
+      console.info("The audio player is idle.");
     });
 
     this.player.on(AudioPlayerStatus.Buffering, () => {
-      console.log("The audio player is buffering.");
+      console.info("The audio player is buffering.");
     });
 
     this.player.on("error", (error) => {

@@ -5,6 +5,7 @@ class Guild {
   constructor() {
     this.voice = null;
     this.player = new Player();
+    this.menus = {};
   }
 
   /* ------------- Player ------------- */
@@ -33,6 +34,7 @@ class Guild {
   joinVoice(channel) {
     this.leaveVoice();
 
+    console.info("Joining voice channel...");
     this.voice = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
@@ -42,7 +44,7 @@ class Guild {
 
   leaveVoice() {
     if (this.voice) {
-      console.log("Leaving voice channel...");
+      console.info("Leaving voice channel...");
 
       this.voice.destroy();
       this.voice = null;
