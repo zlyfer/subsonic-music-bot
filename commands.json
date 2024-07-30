@@ -1,0 +1,82 @@
+{
+  "commands": [
+    {
+      "name": "debug",
+      "description": "Joins the voice channel you are in and plays the first starred song."
+    },
+    {
+      "name": "search",
+      "description": "Search for a song.",
+      "options": [
+        {
+          "name": "query",
+          "description": "Enter a search query.",
+          "type": 3,
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "play",
+      "description": "Continue playback or play a new song.",
+      "options": [
+        {
+          "name": "query",
+          "description": "Enter a search query.",
+          "type": 3,
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "pause",
+      "description": "Pause the current song."
+    },
+    {
+      "name": "continue",
+      "description": "Continue the current song."
+    },
+    {
+      "name": "stop",
+      "description": "Stop the current song."
+    },
+    {
+      "name": "skip",
+      "description": "Skip the current song."
+    },
+    {
+      "name": "show-queue",
+      "description": "Show the current queue."
+    },
+    {
+      "name": "clear-queue",
+      "description": "Clear the current queue."
+    },
+    {
+      "name": "autoplay",
+      "description": "Toggle autoplay.",
+      "options": [
+        {
+          "name": "mode",
+          "type": 3,
+          "choices": [
+            {
+              "name": "None",
+              "value": "none"
+            },
+            {
+              "name": "Random",
+              "value": "random"
+            },
+            {
+              "name": "Similar",
+              "value": "similar"
+            }
+          ],
+          "description": "Enable or disable autoplay.",
+          "required": true
+        }
+      ]
+    }
+  ]
+}
