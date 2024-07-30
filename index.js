@@ -43,7 +43,7 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.isChatInputCommand()) {
     if (!guild) {
-      guild = new Guild();
+      guild = new Guild(subsonicApi);
       guilds[guildId] = guild;
     }
 
@@ -141,9 +141,50 @@ client.on("interactionCreate", async (interaction) => {
             });
           break;
         case "skip":
+          if (await checkIfInVoice(channel, interaction)) {
+            guild.skip();
+            interaction.reply("Skipped the current song.");
+          }
+          break;
         case "show-queue":
+          if (guild.queue.length === 0) {
+            await interaction.reply("The queue is empty.");
+            return;
+          }
+          const pages = Math.ceil(guild.queue.length / 10) - 1;
+          const menu = genQueueMenu(guild, guild.queue, 0);
+          const reply = await interaction.reply({ ...menu, fetchReply: true });
+          guild.menus[reply.id] = {
+            reply,
+            songs: guild.queue,
+            page: 0,
+            pages,
+          };
+          break;
+        case "remove-from-queue":
+          const index = interaction.options.getInteger("index") - 1;
+          if (index < 0 || index >= guild.queue.length) {
+            await interaction.reply("Invalid index.");
+            return;
+          }
+          guild.queue.splice(index, 1);
+          let addition = "";
+          if (guild.queue.length === 0) {
+            addition = "The queue is now empty.";
+          } else if (guild.queue.length === 1) {
+            addition = "There is 1 song in the queue.";
+          } else {
+            addition = `There are ${guild.queue.length} songs in the queue.`;
+          }
+          await interaction.reply("Song removed from queue. " + addition);
+          break;
         case "clear-queue":
+          guild.queue = [];
+          await interaction.reply("The queue has been cleared.");
+          break;
         case "autoplay":
+          await interaction.reply("This command is not implemented yet.");
+          break;
         default:
           await interaction.reply("This command is not implemented yet.");
           break;
@@ -170,10 +211,12 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     switch (interaction.customId) {
-      case "next_page":
+      case "next_s_page":
+      case "next_q_page":
         menu.page += 1;
         break;
-      case "previous_page":
+      case "prev_s_page":
+      case "prev_q_page":
         menu.page -= 1;
         break;
       default:
@@ -181,9 +224,15 @@ client.on("interactionCreate", async (interaction) => {
         return;
     }
 
-    if (interaction.customId === "next_page" || interaction.customId === "previous_page") {
+    if (interaction.customId === "next_s_page" || interaction.customId === "prev_s_page") {
       guild.menus[interaction.message.id].page = menu.page;
       const updatedMenu = genSearchMenu(menu.query, menu.songs, menu.page);
+      await interaction.update(updatedMenu);
+    }
+
+    if (interaction.customId === "next_q_page" || interaction.customId === "prev_q_page") {
+      guild.menus[interaction.message.id].page = menu.page;
+      const updatedMenu = genQueueMenu(guild, menu.songs, menu.page);
       await interaction.update(updatedMenu);
     }
   }
@@ -206,9 +255,14 @@ client.on("interactionCreate", async (interaction) => {
 async function debug(guild) {
   try {
     const data = await subsonicApi.getStarred();
-    if (data && data.status === "ok") {
-      const streamUrl = await subsonicApi.getStreamUrlById(data.starred2.song[0].id);
-      guild.play(streamUrl);
+    const song = data.starred2.song[0];
+
+    if (data && data.status === "ok" && song) {
+      if (await guild.isPlaying()) {
+        guild.queueSong(song);
+      } else {
+        await guild.play(song);
+      }
     }
   } catch (error) {
     console.error("Error fetching starred songs:", error.message);
@@ -224,19 +278,21 @@ async function checkIfInVoice(channel, interaction) {
 }
 
 function genSearchMenu(query, songs, page) {
-  const start = page * 10;
-  const end = start + 10;
+  const MAX_ENTRIES = 10;
+
+  const start = page * MAX_ENTRIES;
+  const end = start + MAX_ENTRIES;
   const songShard = songs.slice(start, end);
   const fields = songShard.map((song) => {
     return {
       name: ``,
-      value: `**${limitText(song.title, 30)}**  |  *${limitText(song.artist, 30)}*
-      *${limitText(song.album, 60)}*  |  **${s2MS(song.duration)}**`,
+      value: `**${limitText(song.title, 30)}** | *${limitText(song.artist, 30)}*
+      *${limitText(song.album, 60)}* | **${s2MS(song.duration)}**`,
     };
   });
   const options = songShard.map((song) => {
     return {
-      label: `${limitText(song.title, 25)}  |  ${limitText(song.artist, 25)}`,
+      label: `${limitText(song.title, 25)} | ${limitText(song.artist, 25)}`,
       value: song.id,
       description: `by ${limitText(song.artist, 50)}`,
     };
@@ -251,7 +307,7 @@ function genSearchMenu(query, songs, page) {
         color: 14595902,
         fields,
         footer: {
-          text: `Page ${page + 1} / ${Math.ceil(songs.length / 10)}  |  Total results: ${
+          text: `Page ${page + 1} / ${Math.ceil(songs.length / MAX_ENTRIES)} | Total results: ${
             songs.length
           }`,
         },
@@ -265,15 +321,15 @@ function genSearchMenu(query, songs, page) {
             type: 2,
             style: 2,
             label: "Previous Page",
-            custom_id: "previous_page",
+            custom_id: "prev_s_page",
             disabled: page === 0,
           },
           {
             type: 2,
             style: 2,
             label: "Next Page",
-            custom_id: "next_page",
-            disabled: page === Math.ceil(songs.length / 10) - 1,
+            custom_id: "next_s_page",
+            disabled: page === Math.ceil(songs.length / MAX_ENTRIES) - 1,
           },
         ],
       },
@@ -286,6 +342,71 @@ function genSearchMenu(query, songs, page) {
             options,
             placeholder: "Select a song...",
             disabled: false,
+          },
+        ],
+      },
+    ],
+    actions: {},
+  };
+
+  return menu;
+}
+
+function genQueueMenu(guild, songs, page) {
+  const MAX_ENTRIES = 10;
+  const start = page * MAX_ENTRIES;
+  const end = start + MAX_ENTRIES;
+  const songShard = songs.slice(start, end);
+  const calcWaitTime = (songs, index) => {
+    let time = guild.currentRemaining;
+    for (let i = 0; i < index; i++) {
+      time += songs[i].duration;
+    }
+
+    return s2MS(time);
+  };
+  const fields = songShard.map((song, index) => {
+    return {
+      name: `Postion: ${index + start + 1} | In ${calcWaitTime(songs, index + start)}`,
+      value: `**${limitText(song.title, 30)}** *(${s2MS(song.duration)})* | **${limitText(
+        song.artist,
+        30
+      )}**`,
+    };
+  });
+
+  const menu = {
+    content: "",
+    tts: false,
+    embeds: [
+      {
+        title: "Queue",
+        color: 14595902,
+        fields,
+        footer: {
+          text: `Page ${page + 1} / ${Math.ceil(songs.length / MAX_ENTRIES)} | Total songs: ${
+            songs.length
+          }`,
+        },
+      },
+    ],
+    components: [
+      {
+        type: 1,
+        components: [
+          {
+            type: 2,
+            style: 2,
+            label: "Previous Page",
+            custom_id: "prev_q_page",
+            disabled: page === 0,
+          },
+          {
+            type: 2,
+            style: 2,
+            label: "Next Page",
+            custom_id: "next_q_page",
+            disabled: page === Math.ceil(songs.length / MAX_ENTRIES) - 1,
           },
         ],
       },

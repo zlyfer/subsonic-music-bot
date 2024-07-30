@@ -80,6 +80,18 @@
       "description": "Show the current queue."
     },
     {
+      "name": "remove-from-queue",
+      "description": "Remove a song from the queue.",
+      "options": [
+        {
+          "name": "index",
+          "description": "Enter the index of the song to remove.",
+          "type": 4,
+          "required": true
+        }
+      ]
+    },
+    {
       "name": "clear-queue",
       "description": "Clear the current queue."
     },
