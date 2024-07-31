@@ -31,8 +31,6 @@ class Guild {
     });
 
     this.player.player.on(AudioPlayerStatus.Idle, () => {
-      // clearInterval(this._currentRemaining);
-      // this.skip();
       console.info("[AUDIO PLAYER] is idle.");
     });
 

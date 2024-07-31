@@ -63,7 +63,28 @@ client.on("interactionCreate", async (interaction) => {
           break;
         case "play":
           if (await checkIfInVoice(channel, interaction)) {
-            await interaction.reply("This command is not implemented yet.");
+            guild.joinVoice(channel);
+            query = interaction.options.getString("query");
+            const reply = await interaction.reply(`Searching for: \`${query}\`...`);
+            subsonicApi.search(query, 1).then(async (data) => {
+              if (data.searchResult3.song) {
+                const song = data.searchResult3.song[0];
+                if (data && data.status === "ok" && song) {
+                  const songInfo = `\`${song.title}\` (*${s2HMS(song.duration)}*) by \`${
+                    song.artist
+                  }\``;
+                  if (guild.currentSong) {
+                    guild.queueSong(song);
+                    await reply.edit(`Added to queue: ${songInfo}`);
+                  } else {
+                    await guild.play(song);
+                    await reply.edit(`Now playing: ${songInfo}`);
+                  }
+                }
+              } else {
+                await reply.edit(`Could not find any songs for: \`${query}\``);
+              }
+            });
           }
           break;
         case "pause":
@@ -114,8 +135,8 @@ client.on("interactionCreate", async (interaction) => {
         case "search":
           query = interaction.options.getString("query");
           count = interaction.options.getInteger("count") || 50;
-          const search = subsonicApi.search(query, count);
-          search
+          subsonicApi
+            .search(query, count)
             .then(async (data) => {
               const songs = data.searchResult3.song;
               if (!songs) {
@@ -243,7 +264,6 @@ client.on("interactionCreate", async (interaction) => {
           guild.queue = [];
           await interaction.reply("The queue has been cleared.");
           break;
-
         default:
           await interaction.reply("This command is not implemented yet.");
           break;
@@ -252,6 +272,7 @@ client.on("interactionCreate", async (interaction) => {
       console.error(error);
       await interaction.reply("An error occurred while executing this command.");
     }
+    return;
   }
 
   /* ------------- Buttons ------------ */
@@ -294,6 +315,7 @@ client.on("interactionCreate", async (interaction) => {
       const updatedMenu = genQueueMenu(guild, menu.songs, menu.page);
       await interaction.update(updatedMenu);
     }
+    return;
   }
 
   /* ------------ Select Menus ------------ */
@@ -306,6 +328,7 @@ client.on("interactionCreate", async (interaction) => {
     const songId = interaction.values[0];
     console.log("Selected Song:", songId);
     await interaction.reply("This command is not implemented yet.");
+    return;
   }
 });
 
@@ -424,22 +447,21 @@ function genQueueMenu(guild, songs, page) {
     for (let i = 0; i < index; i++) {
       time += songs[i].duration;
     }
-
     return time;
   };
   const fields = songShard.map((song, index) => {
     return {
       name: ``,
-      value: `**${index + start + 1}.** **${limitText(song.title, 30)}** *(${s2HMS(
+      value: `**${index + start + 1}.** **${limitText(song.title, 30)}** (*${s2HMS(
         song.duration
-      )})*\n*${limitText(song.album, 30)}* | **${limitText(song.artist, 30)}**\n${s2HMS(
+      )}*)\n*${limitText(song.album, 30)}* | **${limitText(song.artist, 30)}**\n${s2HMS(
         calcWaitTime(songs, index + start)
       )} left`,
     };
   });
 
   const menu = {
-    content: `There are \`${songs.length} song${
+    content: `There ${songs.length != 1 ? "are" : "is"} \`${songs.length} song${
       songs.length != 1 ? "s" : ""
     }\` in the queue.\nTotal duration: \`${s2HMS(
       songs.reduce((acc, song) => acc + song.duration, 0) + guild.currentRemaining
