@@ -1,3 +1,5 @@
 node_modules
 .vscode
-credentials.json
+
+credentials*
+!credentials.template.json
