@@ -24,9 +24,11 @@ const client = new Client({
 
 const subsonicApi = new SubsonicApi(creds.subsonic);
 
-/* ----------- VC & Player ---------- */
+/* ------------- Globals ------------ */
 
 const guilds = {};
+// Highest value is 25!
+const MAX_ENTRIES_PER_PAGE = 10;
 
 /* ----------- Bot Events ----------- */
 
@@ -56,7 +58,7 @@ client.on("interactionCreate", async (interaction) => {
         //   break;
         case "debug":
           if (await checkIfInVoice(channel, interaction)) {
-            guild.joinVoice(channel);
+            // guild.joinVoice(channel);
             debug(guild);
             await interaction.reply(`debugging...`);
           }
@@ -72,7 +74,6 @@ client.on("interactionCreate", async (interaction) => {
                 await interaction.reply("No results found for your search.");
                 return;
               }
-              const pages = Math.ceil(songs.length / 10) - 1;
               const menu = genSearchMenu(query, songs, 0);
               const reply = await interaction.reply({ ...menu, fetchReply: true });
               guild.menus[reply.id] = {
@@ -80,7 +81,6 @@ client.on("interactionCreate", async (interaction) => {
                 query,
                 songs,
                 page: 0,
-                pages,
               };
             })
             .catch(async (error) => {
@@ -163,14 +163,12 @@ client.on("interactionCreate", async (interaction) => {
             await interaction.reply("The queue is empty.");
             return;
           }
-          const pages = Math.ceil(guild.queue.length / 10) - 1;
           const menu = genQueueMenu(guild, guild.queue, 0);
           const reply = await interaction.reply({ ...menu, fetchReply: true });
           guild.menus[reply.id] = {
             reply,
             songs: guild.queue,
             page: 0,
-            pages,
           };
           break;
         case "remove-from-queue":
@@ -290,26 +288,49 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     switch (interaction.customId) {
-      case "next_s_page":
-      case "next_q_page":
-        menu.page += 1;
-        break;
       case "prev_s_page":
       case "prev_q_page":
         menu.page -= 1;
         break;
+      case "next_s_page":
+      case "next_q_page":
+        menu.page += 1;
+        break;
+      case "first_s_page":
+      case "first_q_page":
+        menu.page = 0;
+        break;
+      case "last_s_page":
+      case "last_q_page":
+        menu.page = Math.ceil(menu.songs.length / MAX_ENTRIES_PER_PAGE) - 1;
+        break;
+      case "middle_s_page":
+      case "middle_q_page":
+        menu.page = Math.floor(menu.songs.length / MAX_ENTRIES_PER_PAGE / 2);
+        break;
+      case "clear_queue":
+        guild.queue = [];
+        delete guild.menus[interaction.message.id];
+        await interaction.update({
+          content: "The queue has been cleared.",
+          components: [],
+          embeds: [],
+        });
+        return;
       default:
         await interaction.reply("An error occurred while processing your request.");
         return;
     }
 
-    if (interaction.customId === "next_s_page" || interaction.customId === "prev_s_page") {
+    const s_pages = ["prev_s_page", "next_s_page", "first_s_page", "last_s_page", "middle_s_page"];
+    if (s_pages.includes(interaction.customId)) {
       guild.menus[interaction.message.id].page = menu.page;
       const updatedMenu = genSearchMenu(menu.query, menu.songs, menu.page);
       await interaction.update(updatedMenu);
     }
 
-    if (interaction.customId === "next_q_page" || interaction.customId === "prev_q_page") {
+    const q_pages = ["prev_q_page", "next_q_page", "first_q_page", "last_q_page", "middle_q_page"];
+    if (q_pages.includes(interaction.customId)) {
       guild.menus[interaction.message.id].page = menu.page;
       const updatedMenu = genQueueMenu(guild, menu.songs, menu.page);
       await interaction.update(updatedMenu);
@@ -346,25 +367,16 @@ client.on("interactionCreate", async (interaction) => {
 
 /* -------- Discord Functions ------- */
 
-async function play(guild, song, reply) {
-  const songInfo = genSongInfo(song);
-  if (guild.currentSong) {
-    guild.queueSong(song);
-    await reply.edit(`Added to queue: ${songInfo}`);
-  } else {
-    await guild.play(song);
-    await reply.edit(`Now playing: ${songInfo}`);
-  }
-}
-
 async function debug(guild) {
   try {
     const data = await subsonicApi.getStarred();
-    for (let i = 0; i < 11; i++) {
+    for (let i = 0; i < 40; i++) {
       let index = Math.floor(Math.random() * data.starred2.song.length);
       const song = data.starred2.song[index];
 
       if (data && data.status === "ok" && song) {
+        guild.queueSong(song);
+        continue;
         if (guild.currentSong) {
           guild.queueSong(song);
         } else {
@@ -377,6 +389,17 @@ async function debug(guild) {
   }
 }
 
+async function play(guild, song, reply) {
+  const songInfo = genSongInfo(song);
+  if (guild.currentSong) {
+    guild.queueSong(song);
+    await reply.edit(`Added to queue: ${songInfo}`);
+  } else {
+    await guild.play(song);
+    await reply.edit(`Now playing: ${songInfo}`);
+  }
+}
+
 async function checkIfInVoice(channel, interaction) {
   if (!channel) {
     await interaction.reply("You need to join a voice channel first!");
@@ -386,10 +409,8 @@ async function checkIfInVoice(channel, interaction) {
 }
 
 function genSearchMenu(query, songs, page) {
-  const MAX_ENTRIES = 10;
-
-  const start = page * MAX_ENTRIES;
-  const end = start + MAX_ENTRIES;
+  const start = page * MAX_ENTRIES_PER_PAGE;
+  const end = start + MAX_ENTRIES_PER_PAGE;
   const songShard = songs.slice(start, end);
   const fields = songShard.map((song) => {
     return {
@@ -400,7 +421,7 @@ function genSearchMenu(query, songs, page) {
   });
   const options = songShard.map((song) => {
     return {
-      label: `${limitText(song.title, 25)} | ${limitText(song.artist, 25)}`,
+      label: `${limitText(song.title, 25)}`,
       value: song.id,
       description: `by ${limitText(song.artist, 50)}`,
     };
@@ -415,31 +436,20 @@ function genSearchMenu(query, songs, page) {
         color: 14595902,
         fields,
         footer: {
-          text: `Page ${page + 1} / ${Math.ceil(songs.length / MAX_ENTRIES)} | Total results: ${
+          text: `Page ${page + 1} of ${Math.ceil(songs.length / MAX_ENTRIES_PER_PAGE)} | ${
             songs.length
-          }`,
+          } results`,
         },
       },
     ],
     components: [
       {
         type: 1,
-        components: [
-          {
-            type: 2,
-            style: 2,
-            label: "Previous Page",
-            custom_id: "prev_s_page",
-            disabled: page === 0,
-          },
-          {
-            type: 2,
-            style: 2,
-            label: "Next Page",
-            custom_id: "next_s_page",
-            disabled: page === Math.ceil(songs.length / MAX_ENTRIES) - 1,
-          },
-        ],
+        components: genMenuPageButtons(
+          "s",
+          page,
+          Math.ceil(songs.length / MAX_ENTRIES_PER_PAGE) - 1
+        ),
       },
       {
         type: 1,
@@ -461,9 +471,8 @@ function genSearchMenu(query, songs, page) {
 }
 
 function genQueueMenu(guild, songs, page) {
-  const MAX_ENTRIES = 10;
-  const start = page * MAX_ENTRIES;
-  const end = start + MAX_ENTRIES;
+  const start = page * MAX_ENTRIES_PER_PAGE;
+  const end = start + MAX_ENTRIES_PER_PAGE;
   const songShard = songs.slice(start, end);
   const calcWaitTime = (songs, index) => {
     let time = guild.currentRemaining;
@@ -497,29 +506,33 @@ function genQueueMenu(guild, songs, page) {
         color: 14595902,
         fields,
         footer: {
-          text: `Page ${page + 1} / ${Math.ceil(songs.length / MAX_ENTRIES)} | Total songs: ${
+          text: `Page ${page + 1} of ${Math.ceil(songs.length / MAX_ENTRIES_PER_PAGE)} | ${
             songs.length
-          }`,
+          } songs in queue`,
         },
       },
     ],
     components: [
       {
         type: 1,
+        components: genMenuPageButtons(
+          "q",
+          page,
+          Math.ceil(songs.length / MAX_ENTRIES_PER_PAGE) - 1
+        ),
+      },
+      {
+        type: 1,
         components: [
           {
             type: 2,
             style: 2,
-            label: "Previous Page",
-            custom_id: "prev_q_page",
-            disabled: page === 0,
-          },
-          {
-            type: 2,
-            style: 2,
-            label: "Next Page",
-            custom_id: "next_q_page",
-            disabled: page === Math.ceil(songs.length / MAX_ENTRIES) - 1,
+            label: "Clear Queue",
+            emoji: {
+              name: "❌",
+              animated: false,
+            },
+            custom_id: "clear_queue",
           },
         ],
       },
@@ -528,6 +541,74 @@ function genQueueMenu(guild, songs, page) {
   };
 
   return menu;
+}
+
+function genMenuPageButtons(type, page, maxPage) {
+  var buttons = [];
+  buttons = [
+    ...buttons,
+    {
+      type: 2,
+      style: 2,
+      emoji: {
+        name: "⏮",
+        animated: false,
+      },
+      custom_id: `first_${type}_page`,
+      disabled: page === 0,
+    },
+    {
+      type: 2,
+      style: 2,
+      emoji: {
+        name: "◀️",
+        animated: false,
+      },
+      custom_id: `prev_${type}_page`,
+      disabled: page === 0,
+    },
+  ];
+  if (maxPage + 1 > 2) {
+    const middlePage = Math.floor((maxPage + 1) / 2);
+    buttons = [
+      ...buttons,
+      {
+        type: 2,
+        style: 2,
+        emoji: {
+          name: "↔️",
+          animated: false,
+        },
+        custom_id: `middle_${type}_page`,
+        disabled: page === middlePage,
+      },
+    ];
+  }
+  buttons = [
+    ...buttons,
+    {
+      type: 2,
+      style: 2,
+      emoji: {
+        name: "▶️",
+        animated: false,
+      },
+      custom_id: `next_${type}_page`,
+      disabled: page === maxPage,
+    },
+    {
+      type: 2,
+      style: 2,
+      emoji: {
+        name: "⏭",
+        animated: false,
+      },
+      custom_id: `last_${type}_page`,
+      disabled: page === maxPage,
+    },
+  ];
+
+  return buttons;
 }
 
 /* --------- Other Functions -------- */
