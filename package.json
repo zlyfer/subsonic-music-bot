@@ -25,7 +25,7 @@
     "md5": "^2.3.0",
     "opusscript": "^0.0.8",
     "sodium-native": "^4.1.1",
-    "subsonicjs": "^0.6.0",
+    "subsonicjs": "github:zlyfer/subsonicjs",
     "utf-8-validate": "^6.0.4",
     "zlib-sync": "^0.1.9"
   }
