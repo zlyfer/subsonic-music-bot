@@ -14,6 +14,7 @@ class Guild {
     this.currentSong = null;
     this.currentRemaining = 0;
     this._currentRemaining = null;
+    this._autoLeave = null;
 
     /* ------------- Events ------------- */
 
@@ -30,7 +31,8 @@ class Guild {
     });
 
     this.player.player.on(AudioPlayerStatus.Idle, () => {
-      clearInterval(this._currentRemaining);
+      // clearInterval(this._currentRemaining);
+      // this.skip();
       console.info("[AUDIO PLAYER] is idle.");
     });
 
@@ -47,16 +49,11 @@ class Guild {
 
   async play(song) {
     if (this.voice) {
-      const streamUrl = await this.subsonicApi.getStreamUrlById(song.id);
+      clearTimeout(this._autoLeave);
       this.currentSong = song;
       this.currentRemaining = song.duration;
-      if (this._currentRemaining) {
-        clearInterval(this._currentRemaining);
-      }
-      this._currentRemaining = setInterval(() => {
-        this.currentRemaining -= 1;
-      }, 1000);
-
+      const streamUrl = await this.subsonicApi.getStreamUrlById(song.id);
+      this.setupCRemainingInterval();
       this.history.unshift(song);
       this.player.play(streamUrl);
       this.voice.subscribe(this.player.player);
@@ -64,10 +61,16 @@ class Guild {
   }
 
   continue() {
-    this.player.continue();
+    if (this.currentSong) {
+      this.setupCRemainingInterval();
+      this.player.continue();
+    } else {
+      this.skip();
+    }
   }
 
   pause() {
+    clearInterval(this._currentRemaining);
     this.player.pause();
   }
 
@@ -80,11 +83,13 @@ class Guild {
 
   skip() {
     this.stop();
-    this.play(this.queue.shift());
-  }
+    if (this.queue.length === 0) {
+      this.autoLeave();
+      return false;
+    }
 
-  isPlaying() {
-    return this.player.player.state.status === AudioPlayerStatus.Playing;
+    this.play(this.queue.shift());
+    return true;
   }
 
   queueSong(song) {
@@ -92,6 +97,24 @@ class Guild {
   }
 
   /* -------------- Voice ------------- */
+
+  setupCRemainingInterval() {
+    clearInterval(this._currentRemaining);
+    this._currentRemaining = setInterval(() => {
+      this.currentRemaining -= 1;
+      if (this.currentRemaining <= 0) {
+        clearInterval(this._currentRemaining);
+        this.skip();
+      }
+    }, 1000);
+  }
+
+  autoLeave(seconds = 60) {
+    clearTimeout(this._autoLeave);
+    this._autoLeave = setTimeout(() => {
+      this.leaveVoice();
+    }, seconds * 1000);
+  }
 
   joinVoice(channel) {
     if (this.voice) {
@@ -111,8 +134,10 @@ class Guild {
 
   leaveVoice() {
     console.info("Leaving voice channel...");
-    this.voice.destroy();
-    this.voice = null;
+    if (this.voice) {
+      this.voice.destroy();
+      this.voice = null;
+    }
   }
 }
 

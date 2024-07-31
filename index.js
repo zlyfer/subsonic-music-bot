@@ -47,6 +47,7 @@ client.on("interactionCreate", async (interaction) => {
       guilds[guildId] = guild;
     }
 
+    let type, query, count, customVoiceChannel;
     try {
       switch (interaction.commandName) {
         // case debug:
@@ -56,8 +57,8 @@ client.on("interactionCreate", async (interaction) => {
         case "debug":
           if (await checkIfInVoice(channel, interaction)) {
             guild.joinVoice(channel);
-            await interaction.reply(`I joined your voice channel: ${channel.name}`);
             debug(guild);
+            await interaction.reply(`debugging...`);
           }
           break;
         case "play":
@@ -88,7 +89,7 @@ client.on("interactionCreate", async (interaction) => {
           }
           break;
         case "join":
-          const customVoiceChannel = interaction.options.getChannel("channel");
+          customVoiceChannel = interaction.options.getChannel("channel");
           if (customVoiceChannel) {
             if (customVoiceChannel.type !== ChannelType.GuildVoice) {
               await interaction.reply("I can only join voice channels.");
@@ -111,8 +112,8 @@ client.on("interactionCreate", async (interaction) => {
           }
           break;
         case "search":
-          const query = interaction.options.getString("query");
-          const count = interaction.options.getInteger("count") || 50;
+          query = interaction.options.getString("query");
+          count = interaction.options.getInteger("count") || 50;
           const search = subsonicApi.search(query, count);
           search
             .then(async (data) => {
@@ -142,9 +143,23 @@ client.on("interactionCreate", async (interaction) => {
           break;
         case "skip":
           if (await checkIfInVoice(channel, interaction)) {
-            guild.skip();
-            interaction.reply("Skipped the current song.");
+            const result = guild.skip();
+            if (result) {
+              await interaction.reply("Skipped the current song.");
+            } else {
+              await interaction.reply(
+                "The queue is empty. Leaving voice channel in `1 minute` if no songs are added."
+              );
+            }
           }
+          break;
+        case "shuffle":
+          if (guild.queue.length === 0) {
+            await interaction.reply("The queue is empty.");
+            return;
+          }
+          guild.queue = guild.queue.sort(() => Math.random() - 0.5);
+          await interaction.reply("The queue has been shuffled.");
           break;
         case "show-queue":
           if (guild.queue.length === 0) {
@@ -162,29 +177,73 @@ client.on("interactionCreate", async (interaction) => {
           };
           break;
         case "remove-from-queue":
-          const index = interaction.options.getInteger("index") - 1;
-          if (index < 0 || index >= guild.queue.length) {
-            await interaction.reply("Invalid index.");
+          if (guild.queue.length == 0) {
+            await interaction.reply("The queue is empty.");
             return;
           }
-          guild.queue.splice(index, 1);
-          let addition = "";
-          if (guild.queue.length === 0) {
-            addition = "The queue is now empty.";
-          } else if (guild.queue.length === 1) {
-            addition = "There is 1 song in the queue.";
+          type = interaction.options.getString("type");
+          if (type == "index") {
+            const index = parseInt(interaction.options.getString("query"));
+            if (isNaN(index)) {
+              await interaction.reply("Index must be a number.");
+              return;
+            }
+            if (index < 1 || index > guild.queue.length) {
+              await interaction.reply(`Index must be between 1 and ${guild.queue.length}.`);
+              return;
+            }
+            guild.queue.splice(index - 1, 1);
           } else {
-            addition = `There are ${guild.queue.length} songs in the queue.`;
+            const title = interaction.options.getString("query");
+            const index = guild.queue.findIndex((song) => song.title === title);
+            if (index === -1) {
+              await interaction.reply("Song not found in queue.");
+              return;
+            }
+            guild.queue.splice(index, 1);
           }
-          await interaction.reply("Song removed from queue. " + addition);
+          await interaction.reply("Song removed from queue. " + queueLeftText(guild.queue));
+          break;
+        case "clear-from-queue":
+          type = interaction.options.getString("type");
+          query = interaction.options.getString("query");
+          let songCount = guild.queue.length;
+          if (type == "artist") {
+            const index = guild.queue.findIndex((song) => song.artist === query);
+            if (index === -1) {
+              await interaction.reply("Artist not found in queue.");
+              return;
+            }
+            guild.queue = guild.queue.filter((song) => song.artist !== query);
+          } else if (type == "album") {
+            const index = guild.queue.findIndex((song) => song.album === query);
+            if (index === -1) {
+              await interaction.reply("Album not found in queue.");
+              return;
+            }
+            guild.queue = guild.queue.filter((song) => song.album !== query);
+          } else if (type == "title") {
+            const index = guild.queue.findIndex((song) => song.title === query);
+            if (index === -1) {
+              await interaction.reply("Title not found in queue.");
+              return;
+            }
+            guild.queue = guild.queue.filter((song) => song.title !== query);
+          } else {
+            await interaction.reply("Invalid type.");
+            return;
+          }
+          songCount -= guild.queue.length;
+          await interaction.reply(
+            `${songCount} song${songCount != 1 ? "s" : ""} removed from the queue. ` +
+              queueLeftText(guild.queue)
+          );
           break;
         case "clear-queue":
           guild.queue = [];
           await interaction.reply("The queue has been cleared.");
           break;
-        case "autoplay":
-          await interaction.reply("This command is not implemented yet.");
-          break;
+
         default:
           await interaction.reply("This command is not implemented yet.");
           break;
@@ -255,13 +314,16 @@ client.on("interactionCreate", async (interaction) => {
 async function debug(guild) {
   try {
     const data = await subsonicApi.getStarred();
-    const song = data.starred2.song[0];
+    for (let i = 0; i < 11; i++) {
+      let index = Math.floor(Math.random() * data.starred2.song.length);
+      const song = data.starred2.song[index];
 
-    if (data && data.status === "ok" && song) {
-      if (await guild.isPlaying()) {
-        guild.queueSong(song);
-      } else {
-        await guild.play(song);
+      if (data && data.status === "ok" && song) {
+        if (guild.currentSong) {
+          guild.queueSong(song);
+        } else {
+          await guild.play(song);
+        }
       }
     }
   } catch (error) {
@@ -287,7 +349,7 @@ function genSearchMenu(query, songs, page) {
     return {
       name: ``,
       value: `**${limitText(song.title, 30)}** | *${limitText(song.artist, 30)}*
-      *${limitText(song.album, 60)}* | **${s2MS(song.duration)}**`,
+      *${limitText(song.album, 60)}* | **${s2HMS(song.duration)}**`,
     };
   });
   const options = songShard.map((song) => {
@@ -363,20 +425,26 @@ function genQueueMenu(guild, songs, page) {
       time += songs[i].duration;
     }
 
-    return s2MS(time);
+    return time;
   };
   const fields = songShard.map((song, index) => {
     return {
-      name: `Postion: ${index + start + 1} | In ${calcWaitTime(songs, index + start)}`,
-      value: `**${limitText(song.title, 30)}** *(${s2MS(song.duration)})* | **${limitText(
-        song.artist,
-        30
-      )}**`,
+      name: ``,
+      value: `**${index + start + 1}.** **${limitText(song.title, 30)}** *(${s2HMS(
+        song.duration
+      )})*\n*${limitText(song.album, 30)}* | **${limitText(song.artist, 30)}**\n${s2HMS(
+        calcWaitTime(songs, index + start)
+      )} left`,
     };
   });
 
   const menu = {
-    content: "",
+    content: `There are \`${songs.length} song${
+      songs.length != 1 ? "s" : ""
+    }\` in the queue.\nTotal duration: \`${s2HMS(
+      songs.reduce((acc, song) => acc + song.duration, 0) + guild.currentRemaining
+    )}\`.
+    `,
     tts: false,
     embeds: [
       {
@@ -419,10 +487,15 @@ function genQueueMenu(guild, songs, page) {
 
 /* --------- Other Functions -------- */
 
-function s2MS(duration) {
-  const minutes = Math.floor(duration / 60);
-  const seconds = duration % 60;
-  return `${minutes}m ${seconds}s`;
+function s2HMS(duration) {
+  let hours = Math.floor(duration / 3600);
+  let minutes = Math.floor((duration % 3600) / 60);
+  let seconds = duration % 60;
+  let time = "";
+  if (hours > 0) time += `${hours}h `;
+  if (minutes > 0 || hours > 0) time += `${minutes}m `;
+  time += `${seconds}s`;
+  return time;
 }
 
 function limitText(text, length, addEllipsis = true) {
@@ -431,6 +504,18 @@ function limitText(text, length, addEllipsis = true) {
     return text.substring(0, length - 3) + (addEllipsis ? "..." : "");
   }
   return text;
+}
+
+function queueLeftText(queue) {
+  let addition = "";
+  if (queue.length === 0) {
+    addition = "The queue is now empty.";
+  } else if (queue.length === 1) {
+    addition = "There is 1 song in the queue.";
+  } else {
+    addition = `There are ${queue.length} songs in the queue.`;
+  }
+  return addition;
 }
 
 /* ---------- Bot Shutdown ---------- */
@@ -451,6 +536,12 @@ process.on("SIGTERM", handleShutdown);
 /* ----------- Bot Startup ---------- */
 
 const rest = new REST({ version: "10" }).setToken(creds.discord.token);
+
+// const currentCommands = await rest.get(Routes.applicationCommands(creds.discord.client_id));
+// currentCommands.forEach(async (command) => {
+//   console.info(`${command.name} - ${command.description}`);
+// });
+
 try {
   console.info("Attempt: Reload /commands");
 

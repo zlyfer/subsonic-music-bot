@@ -76,17 +76,69 @@
       "description": "Skip the current song."
     },
     {
+      "name": "shuffle",
+      "description": "Shuffle the current queue."
+    },
+    {
       "name": "show-queue",
       "description": "Show the current queue."
     },
     {
       "name": "remove-from-queue",
-      "description": "Remove a song from the queue.",
+      "description": "Remove a song from the queue by index or title (first match).",
       "options": [
         {
-          "name": "index",
-          "description": "Enter the index of the song to remove.",
-          "type": 4,
+          "name": "type",
+          "description": "Choose either index or title.",
+          "type": 3,
+          "required": true,
+          "choices": [
+            {
+              "name": "Index",
+              "value": "index"
+            },
+            {
+              "name": "Title",
+              "value": "title"
+            }
+          ]
+        },
+        {
+          "name": "query",
+          "description": "Enter the index in queue or the title to remove.",
+          "type": 3,
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "clear-from-queue",
+      "description": "Clear songs matching a query from the queue.",
+      "options": [
+        {
+          "name": "type",
+          "description": "Choose either song, album or artist.",
+          "type": 3,
+          "required": true,
+          "choices": [
+            {
+              "name": "Title",
+              "value": "title"
+            },
+            {
+              "name": "Album",
+              "value": "album"
+            },
+            {
+              "name": "Artist",
+              "value": "artist"
+            }
+          ]
+        },
+        {
+          "name": "query",
+          "description": "Enter a query to match the type.",
+          "type": 3,
           "required": true
         }
       ]
@@ -94,32 +146,6 @@
     {
       "name": "clear-queue",
       "description": "Clear the current queue."
-    },
-    {
-      "name": "autoplay",
-      "description": "Toggle autoplay.",
-      "options": [
-        {
-          "name": "mode",
-          "type": 3,
-          "choices": [
-            {
-              "name": "None",
-              "value": "none"
-            },
-            {
-              "name": "Random",
-              "value": "random"
-            },
-            {
-              "name": "Similar",
-              "value": "similar"
-            }
-          ],
-          "description": "Enable or disable autoplay.",
-          "required": true
-        }
-      ]
     }
   ]
 }
