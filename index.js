@@ -61,6 +61,35 @@ client.on("interactionCreate", async (interaction) => {
             await interaction.reply(`debugging...`);
           }
           break;
+        case "search":
+          query = interaction.options.getString("query");
+          count = interaction.options.getInteger("count") || 50;
+          subsonicApi
+            .search(query, count)
+            .then(async (data) => {
+              const songs = data.searchResult3.song;
+              if (!songs) {
+                await interaction.reply("No results found for your search.");
+                return;
+              }
+              const pages = Math.ceil(songs.length / 10) - 1;
+              const menu = genSearchMenu(query, songs, 0);
+              const reply = await interaction.reply({ ...menu, fetchReply: true });
+              guild.menus[reply.id] = {
+                reply,
+                query,
+                songs,
+                page: 0,
+                pages,
+              };
+            })
+            .catch(async (error) => {
+              console.error(`error:`, error);
+              if (interaction.deferred) {
+                await interaction.reply("An error occurred while searching for songs.");
+              }
+            });
+          break;
         case "play":
           if (await checkIfInVoice(channel, interaction)) {
             guild.joinVoice(channel);
@@ -70,16 +99,7 @@ client.on("interactionCreate", async (interaction) => {
               if (data.searchResult3.song) {
                 const song = data.searchResult3.song[0];
                 if (data && data.status === "ok" && song) {
-                  const songInfo = `\`${song.title}\` (*${s2HMS(song.duration)}*) by \`${
-                    song.artist
-                  }\``;
-                  if (guild.currentSong) {
-                    guild.queueSong(song);
-                    await reply.edit(`Added to queue: ${songInfo}`);
-                  } else {
-                    await guild.play(song);
-                    await reply.edit(`Now playing: ${songInfo}`);
-                  }
+                  play(guild, song, reply);
                 }
               } else {
                 await reply.edit(`Could not find any songs for: \`${query}\``);
@@ -109,69 +129,25 @@ client.on("interactionCreate", async (interaction) => {
             interaction.reply("Playback stopped.");
           }
           break;
-        case "join":
-          customVoiceChannel = interaction.options.getChannel("channel");
-          if (customVoiceChannel) {
-            if (customVoiceChannel.type !== ChannelType.GuildVoice) {
-              await interaction.reply("I can only join voice channels.");
-              return;
-            }
-            guild.joinVoice(customVoiceChannel);
-            await interaction.reply(`I joined the voice channel: ${customVoiceChannel.name}`);
-            return;
-          }
-          if (await checkIfInVoice(channel, interaction)) {
-            guild.joinVoice(channel);
-            await interaction.reply(`I joined your voice channel: ${channel.name}`);
-            return;
-          }
-          break;
-        case "leave":
-          if (await checkIfInVoice(channel, interaction)) {
-            guild.leaveVoice();
-            interaction.reply("I left the voice channel.");
-          }
-          break;
-        case "search":
-          query = interaction.options.getString("query");
-          count = interaction.options.getInteger("count") || 50;
-          subsonicApi
-            .search(query, count)
-            .then(async (data) => {
-              const songs = data.searchResult3.song;
-              if (!songs) {
-                await interaction.reply("No results found for your search.");
-                return;
-              }
-              const pages = Math.ceil(songs.length / 10) - 1;
-              const menu = genSearchMenu(query, songs, 0);
-              const reply = await interaction.reply({ ...menu, fetchReply: true });
-
-              guild.menus[reply.id] = {
-                reply,
-                query,
-                songs,
-                page: 0,
-                pages,
-              };
-            })
-            .catch(async (error) => {
-              console.error(`error:`, error);
-              if (interaction.deferred) {
-                await interaction.reply("An error occurred while searching for songs.");
-              }
-            });
-          break;
         case "skip":
           if (await checkIfInVoice(channel, interaction)) {
-            const result = guild.skip();
-            if (result) {
-              await interaction.reply("Skipped the current song.");
-            } else {
+            if (guild.queue.length === 0 && !guild.currentSong) {
               await interaction.reply(
-                "The queue is empty. Leaving voice channel in `1 minute` if no songs are added."
+                "Cannot skip, there is no song playing and the queue is empty."
+              );
+              return;
+            }
+            const song = guild.skip();
+            if (song) {
+              await interaction.reply(
+                `Skipped the current song. Now playing: ${genSongInfo(song)}`
               );
             }
+            // else {
+            //   await interaction.reply(
+            //     "The queue is empty. Leaving voice channel in `1 minute` if no songs are added."
+            //   );
+            // }
           }
           break;
         case "shuffle":
@@ -264,6 +240,29 @@ client.on("interactionCreate", async (interaction) => {
           guild.queue = [];
           await interaction.reply("The queue has been cleared.");
           break;
+        case "join":
+          customVoiceChannel = interaction.options.getChannel("channel");
+          if (customVoiceChannel) {
+            if (customVoiceChannel.type !== ChannelType.GuildVoice) {
+              await interaction.reply("I can only join voice channels.");
+              return;
+            }
+            guild.joinVoice(customVoiceChannel);
+            await interaction.reply(`I joined the voice channel: ${customVoiceChannel.name}`);
+            return;
+          }
+          if (await checkIfInVoice(channel, interaction)) {
+            guild.joinVoice(channel);
+            await interaction.reply(`I joined your voice channel: ${channel.name}`);
+            return;
+          }
+          break;
+        case "leave":
+          if (await checkIfInVoice(channel, interaction)) {
+            guild.leaveVoice();
+            interaction.reply("I left the voice channel.");
+          }
+          break;
         default:
           await interaction.reply("This command is not implemented yet.");
           break;
@@ -321,18 +320,42 @@ client.on("interactionCreate", async (interaction) => {
   /* ------------ Select Menus ------------ */
 
   if (interaction.isStringSelectMenu()) {
-    if (!guild) {
-      await interaction.reply("An error occurred while processing your request.");
+    if (await checkIfInVoice(channel, interaction)) {
+      guild.joinVoice(channel);
+      if (!guild) {
+        await interaction.reply("An error occurred while processing your request.");
+        return;
+      }
+      const songId = interaction.values[0];
+      const song = guild.menus[interaction.message.id].songs.find((song) => song.id === songId);
+      if (!song) {
+        await interaction.reply("An error occurred while processing your request.");
+        return;
+      }
+      if (guild.currentSong) {
+        guild.queueSong(song);
+        await interaction.reply(`Added to queue: ${genSongInfo(song)}`);
+      } else {
+        await guild.play(song);
+        await interaction.reply(`Now playing: ${genSongInfo(song)}`);
+      }
       return;
     }
-    const songId = interaction.values[0];
-    console.log("Selected Song:", songId);
-    await interaction.reply("This command is not implemented yet.");
-    return;
   }
 });
 
 /* -------- Discord Functions ------- */
+
+async function play(guild, song, reply) {
+  const songInfo = genSongInfo(song);
+  if (guild.currentSong) {
+    guild.queueSong(song);
+    await reply.edit(`Added to queue: ${songInfo}`);
+  } else {
+    await guild.play(song);
+    await reply.edit(`Now playing: ${songInfo}`);
+  }
+}
 
 async function debug(guild) {
   try {
@@ -508,6 +531,10 @@ function genQueueMenu(guild, songs, page) {
 }
 
 /* --------- Other Functions -------- */
+
+function genSongInfo(song) {
+  return `\`${song.title}\` (*${s2HMS(song.duration)}*) by \`${song.artist}\``;
+}
 
 function s2HMS(duration) {
   let hours = Math.floor(duration / 3600);

@@ -82,12 +82,13 @@ class Guild {
   skip() {
     this.stop();
     if (this.queue.length === 0) {
-      this.autoLeave();
+      // this.autoLeave();
       return false;
     }
 
-    this.play(this.queue.shift());
-    return true;
+    const song = this.queue.shift();
+    this.play(song);
+    return song;
   }
 
   queueSong(song) {
