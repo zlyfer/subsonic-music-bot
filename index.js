@@ -44,13 +44,13 @@ client.on("interactionCreate", async (interaction) => {
   /* ------------ Commands ------------ */
 
   if (interaction.isChatInputCommand()) {
-    if (!guild) {
-      guild = new Guild(subsonicApi);
-      guilds[guildId] = guild;
-    }
-
-    let type, query, count, customVoiceChannel;
     try {
+      if (!guild) {
+        guild = new Guild(subsonicApi);
+        guilds[guildId] = guild;
+      }
+
+      let type, query, count, customVoiceChannel;
       switch (interaction.commandName) {
         // case debug:
         //   if (await checkIfInVoice(channel, interaction)) {
@@ -61,6 +61,11 @@ client.on("interactionCreate", async (interaction) => {
             // guild.joinVoice(channel);
             debug(guild);
             await interaction.reply(`debugging...`);
+          }
+          break;
+        case "panel":
+          if (await checkIfInVoice(channel, interaction)) {
+            await interaction.reply("Panel is not implemented yet.");
           }
           break;
         case "search":
@@ -92,14 +97,19 @@ client.on("interactionCreate", async (interaction) => {
           break;
         case "play":
           if (await checkIfInVoice(channel, interaction)) {
-            guild.joinVoice(channel);
             query = interaction.options.getString("query");
             const reply = await interaction.reply(`Searching for: \`${query}\`...`);
             subsonicApi.search(query, 1).then(async (data) => {
               if (data.searchResult3.song) {
                 const song = data.searchResult3.song[0];
                 if (data && data.status === "ok" && song) {
-                  play(guild, song, reply);
+                  guild.joinVoice(channel);
+                  const songInfo = genSongInfo(song);
+                  if (await play(guild, song)) {
+                    await reply.edit(`Added to queue: ${songInfo}`);
+                  } else {
+                    await reply.edit(`Now playing: ${songInfo}`);
+                  }
                 }
               } else {
                 await reply.edit(`Could not find any songs for: \`${query}\``);
@@ -139,9 +149,9 @@ client.on("interactionCreate", async (interaction) => {
             }
             const song = guild.skip();
             if (song) {
-              await interaction.reply(
-                `Skipped the current song. Now playing: ${genSongInfo(song)}`
-              );
+              await interaction.reply(`Song skipped. Now playing: ${genSongInfo(song)}`);
+            } else {
+              await interaction.reply("Song skipped. The queue is empty now.");
             }
             // else {
             //   await interaction.reply(
@@ -269,98 +279,117 @@ client.on("interactionCreate", async (interaction) => {
       console.error(error);
       await interaction.reply("An error occurred while executing this command.");
     }
-    return;
   }
 
   /* ------------- Buttons ------------ */
 
   if (interaction.isButton()) {
-    if (!guild) {
-      await interaction.reply("An error occurred while processing your request.");
-      return;
-    }
-
-    const menu = guild.menus[interaction.message.id];
-
-    if (!menu) {
-      await interaction.reply("An error occurred while processing your request.");
-      return;
-    }
-
-    switch (interaction.customId) {
-      case "prev_s_page":
-      case "prev_q_page":
-        menu.page -= 1;
-        break;
-      case "next_s_page":
-      case "next_q_page":
-        menu.page += 1;
-        break;
-      case "first_s_page":
-      case "first_q_page":
-        menu.page = 0;
-        break;
-      case "last_s_page":
-      case "last_q_page":
-        menu.page = Math.ceil(menu.songs.length / MAX_ENTRIES_PER_PAGE) - 1;
-        break;
-      case "middle_s_page":
-      case "middle_q_page":
-        menu.page = Math.floor(menu.songs.length / MAX_ENTRIES_PER_PAGE / 2);
-        break;
-      case "clear_queue":
-        guild.queue = [];
-        delete guild.menus[interaction.message.id];
-        await interaction.update({
-          content: "The queue has been cleared.",
-          components: [],
-          embeds: [],
-        });
-        return;
-      default:
+    try {
+      if (!guild) {
         await interaction.reply("An error occurred while processing your request.");
         return;
-    }
+      }
 
-    const s_pages = ["prev_s_page", "next_s_page", "first_s_page", "last_s_page", "middle_s_page"];
-    if (s_pages.includes(interaction.customId)) {
-      guild.menus[interaction.message.id].page = menu.page;
-      const updatedMenu = genSearchMenu(menu.query, menu.songs, menu.page);
-      await interaction.update(updatedMenu);
-    }
+      const menu = guild.menus[interaction.message.id];
 
-    const q_pages = ["prev_q_page", "next_q_page", "first_q_page", "last_q_page", "middle_q_page"];
-    if (q_pages.includes(interaction.customId)) {
-      guild.menus[interaction.message.id].page = menu.page;
-      const updatedMenu = genQueueMenu(guild, menu.songs, menu.page);
-      await interaction.update(updatedMenu);
+      if (!menu) {
+        await interaction.reply("An error occurred while processing your request.");
+        return;
+      }
+      switch (interaction.customId) {
+        case "prev_s_page":
+        case "prev_q_page":
+          menu.page -= 1;
+          break;
+        case "next_s_page":
+        case "next_q_page":
+          menu.page += 1;
+          break;
+        case "first_s_page":
+        case "first_q_page":
+          menu.page = 0;
+          break;
+        case "last_s_page":
+        case "last_q_page":
+          menu.page = Math.ceil(menu.songs.length / MAX_ENTRIES_PER_PAGE) - 1;
+          break;
+        case "middle_s_page":
+        case "middle_q_page":
+          menu.page = Math.floor(menu.songs.length / MAX_ENTRIES_PER_PAGE / 2);
+          break;
+        case "clear_queue":
+          guild.queue = [];
+          delete guild.menus[interaction.message.id];
+          await interaction.update({
+            content: "The queue has been cleared.",
+            components: [],
+            embeds: [],
+          });
+          return;
+        default:
+          await interaction.reply("An error occurred while processing your request.");
+          return;
+      }
+
+      const s_pages = [
+        "prev_s_page",
+        "next_s_page",
+        "first_s_page",
+        "last_s_page",
+        "middle_s_page",
+      ];
+      if (s_pages.includes(interaction.customId)) {
+        guild.menus[interaction.message.id].page = menu.page;
+        const updatedMenu = genSearchMenu(menu.query, menu.songs, menu.page);
+        await interaction.update(updatedMenu);
+      }
+
+      const q_pages = [
+        "prev_q_page",
+        "next_q_page",
+        "first_q_page",
+        "last_q_page",
+        "middle_q_page",
+      ];
+      if (q_pages.includes(interaction.customId)) {
+        guild.menus[interaction.message.id].page = menu.page;
+        const updatedMenu = genQueueMenu(guild, menu.songs, menu.page);
+        await interaction.update(updatedMenu);
+      }
+      return;
+    } catch (error) {
+      console.error(error);
+      await interaction.reply("An error occurred while executing this command.");
     }
-    return;
   }
 
   /* ------------ Select Menus ------------ */
 
   if (interaction.isStringSelectMenu()) {
-    if (await checkIfInVoice(channel, interaction)) {
-      guild.joinVoice(channel);
-      if (!guild) {
-        await interaction.reply("An error occurred while processing your request.");
+    try {
+      if (await checkIfInVoice(channel, interaction)) {
+        if (!guild) {
+          await interaction.reply("An error occurred while processing your request.");
+          return;
+        }
+        const songId = interaction.values[0];
+        const song = guild.menus[interaction.message.id].songs.find((song) => song.id === songId);
+        if (!song) {
+          await interaction.reply("An error occurred while processing your request.");
+          return;
+        }
+        guild.joinVoice(channel);
+        const songInfo = genSongInfo(song);
+        if (await play(guild, song)) {
+          await interaction.reply(`Added to queue: ${songInfo}`);
+        } else {
+          await interaction.reply(`Now playing: ${songInfo}`);
+        }
         return;
       }
-      const songId = interaction.values[0];
-      const song = guild.menus[interaction.message.id].songs.find((song) => song.id === songId);
-      if (!song) {
-        await interaction.reply("An error occurred while processing your request.");
-        return;
-      }
-      if (guild.currentSong) {
-        guild.queueSong(song);
-        await interaction.reply(`Added to queue: ${genSongInfo(song)}`);
-      } else {
-        await guild.play(song);
-        await interaction.reply(`Now playing: ${genSongInfo(song)}`);
-      }
-      return;
+    } catch (error) {
+      console.error(error);
+      await interaction.reply("An error occurred while executing this command.");
     }
   }
 });
@@ -389,14 +418,13 @@ async function debug(guild) {
   }
 }
 
-async function play(guild, song, reply) {
-  const songInfo = genSongInfo(song);
+async function play(guild, song) {
   if (guild.currentSong) {
     guild.queueSong(song);
-    await reply.edit(`Added to queue: ${songInfo}`);
+    return true;
   } else {
     await guild.play(song);
-    await reply.edit(`Now playing: ${songInfo}`);
+    return false;
   }
 }
 

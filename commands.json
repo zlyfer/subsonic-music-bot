@@ -5,6 +5,10 @@
       "description": "Joins the voice channel you are in and plays the first starred song."
     },
     {
+      "name": "panel",
+      "description": "Show the control panel."
+    },
+    {
       "name": "search",
       "description": "Search for a song.",
       "options": [
