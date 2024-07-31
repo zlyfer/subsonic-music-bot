@@ -4,7 +4,24 @@
       "name": "debug",
       "description": "Joins the voice channel you are in and plays the first starred song."
     },
-
+    {
+      "name": "search",
+      "description": "Search for a song.",
+      "options": [
+        {
+          "name": "query",
+          "description": "Enter a search query.",
+          "type": 3,
+          "required": true
+        },
+        {
+          "name": "count",
+          "description": "Total number of search results to show. (default: 50)",
+          "type": 4,
+          "required": false
+        }
+      ]
+    },
     {
       "name": "play",
       "description": "Play a song or add one to the queue.",
@@ -38,43 +55,10 @@
       ]
     },
     {
-      "name": "join",
-      "description": "Join a voice channel.",
-      "options": [
-        {
-          "name": "channel",
-          "description": "Enter a voice channel. (Leave empty to join your current voice channel.)",
-          "type": 7,
-          "required": false
-        }
-      ]
-    },
-    {
-      "name": "leave",
-      "description": "Leave the voice channel."
-    },
-    {
-      "name": "search",
-      "description": "Search for a song.",
-      "options": [
-        {
-          "name": "query",
-          "description": "Enter a search query.",
-          "type": 3,
-          "required": true
-        },
-        {
-          "name": "count",
-          "description": "Total number of search results to show. (default: 50)",
-          "type": 4,
-          "required": false
-        }
-      ]
-    },
-    {
       "name": "skip",
       "description": "Skip the current song."
     },
+
     {
       "name": "shuffle",
       "description": "Shuffle the current queue."
@@ -146,6 +130,22 @@
     {
       "name": "clear-queue",
       "description": "Clear the current queue."
+    },
+    {
+      "name": "join",
+      "description": "Join a voice channel.",
+      "options": [
+        {
+          "name": "channel",
+          "description": "Enter a voice channel. (Leave empty to join your current voice channel.)",
+          "type": 7,
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "leave",
+      "description": "Leave the voice channel."
     }
   ]
 }
