@@ -1,13 +1,12 @@
 /* ------------- Imports ------------ */
 
-import { Client, GatewayIntentBits, REST, Routes, ChannelType } from "discord.js";
-
-import fs from "fs";
+const { Client, GatewayIntentBits, REST, Routes, ChannelType } = require("discord.js");
+const fs = require("fs");
 
 /* ------------- Classes ------------ */
 
-import SubsonicApi from "./classes/SubsonicApi.js";
-import Guild from "./classes/Guild.js";
+const SubsonicApi = require("./classes/SubsonicApi.js");
+const Guild = require("./classes/Guild.js");
 
 /* ------ Config & Credentials ------ */
 
@@ -22,6 +21,7 @@ const client = new Client({
 
 /* ---------- Init Subsonic --------- */
 
+// this is being used: module.exports = SubsonicApi;
 const subsonicApi = new SubsonicApi(creds.subsonic);
 
 /* ------------- Globals ------------ */
@@ -693,20 +693,24 @@ process.on("SIGTERM", handleShutdown);
 
 /* ----------- Bot Startup ---------- */
 
-const rest = new REST({ version: "10" }).setToken(creds.discord.token);
+async function main() {
+  const rest = new REST({ version: "10" }).setToken(creds.discord.token);
 
-// const currentCommands = await rest.get(Routes.applicationCommands(creds.discord.client_id));
-// currentCommands.forEach(async (command) => {
-//   console.info(`${command.name} - ${command.description}`);
-// });
+  // const currentCommands = await rest.get(Routes.applicationCommands(creds.discord.client_id));
+  // currentCommands.forEach(async (command) => {
+  //   console.info(`${command.name} - ${command.description}`);
+  // });
 
-try {
-  console.info("Attempt: Reload /commands");
+  try {
+    console.info("Attempt: Reload /commands");
 
-  await rest.put(Routes.applicationCommands(creds.discord.client_id), { body: commands });
+    await rest.put(Routes.applicationCommands(creds.discord.client_id), { body: commands });
 
-  console.info("Success: Reload /commands");
-} catch (error) {
-  console.error(error);
+    console.info("Success: Reload /commands");
+  } catch (error) {
+    console.error(error);
+  }
+  client.login(creds.discord.token);
 }
-client.login(creds.discord.token);
+
+main();

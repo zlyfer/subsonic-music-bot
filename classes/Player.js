@@ -1,4 +1,4 @@
-import { createAudioPlayer, createAudioResource } from "@discordjs/voice";
+const { createAudioPlayer, createAudioResource } = require("@discordjs/voice");
 
 class Player {
   constructor() {
@@ -6,6 +6,7 @@ class Player {
   }
 
   play(url) {
+    console.debug(`url:`, url);
     const resource = createAudioResource(url, { inlineVolume: true });
     resource.volume.setVolume(0.1);
     this.player.play(resource);
@@ -24,4 +25,4 @@ class Player {
   }
 }
 
-export default Player;
+module.exports = Player;

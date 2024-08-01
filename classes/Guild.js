@@ -1,5 +1,5 @@
-import Player from "./Player.js";
-import { joinVoiceChannel, AudioPlayerStatus } from "@discordjs/voice";
+const Player = require("./Player.js");
+const { joinVoiceChannel, AudioPlayerStatus } = require("@discordjs/voice");
 
 class Guild {
   constructor(subsonicApi) {
@@ -140,4 +140,4 @@ class Guild {
   }
 }
 
-export default Guild;
+module.exports = Guild;

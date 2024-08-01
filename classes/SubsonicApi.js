@@ -1,5 +1,5 @@
-import subsonic from "subsonicjs";
-import md5 from "md5";
+const subsonic = require("subsonicjs");
+const md5 = require("md5");
 
 class SubsonicApi {
   constructor(c_subsonic) {
@@ -50,4 +50,4 @@ class SubsonicApi {
   /* -------------- User -------------- */
 }
 
-export default SubsonicApi;
+module.exports = SubsonicApi;
