@@ -1,15 +1,26 @@
 const { createAudioPlayer, createAudioResource } = require("@discordjs/voice");
+const { Readable } = require("stream");
+const axios = require("axios");
 
 class Player {
   constructor() {
     this.player = createAudioPlayer();
   }
 
-  play(url) {
+  async play(url) {
     console.debug(`url:`, url);
-    const resource = createAudioResource(url, { inlineVolume: true });
-    resource.volume.setVolume(0.1);
-    this.player.play(resource);
+    try {
+      const response = await axios.get(url, { responseType: "stream" });
+      const resource = createAudioResource(Readable.from(response.data), {
+        inlineVolume: true,
+        inputType: "arbitrary",
+        bufferingTime: 10000,
+      });
+      resource.volume.setVolume(0.1);
+      this.player.play(resource);
+    } catch (error) {
+      console.error(`${error.message}`, error);
+    }
   }
 
   continue() {
