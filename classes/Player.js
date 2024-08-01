@@ -8,13 +8,12 @@ class Player {
   }
 
   async play(url) {
-    console.debug(`url:`, url);
     try {
       const response = await axios.get(url, { responseType: "stream" });
       const resource = createAudioResource(Readable.from(response.data), {
         inlineVolume: true,
         inputType: "arbitrary",
-        bufferingTime: 10000,
+        bufferingTime: 1000,
       });
       resource.volume.setVolume(0.1);
       this.player.play(resource);
