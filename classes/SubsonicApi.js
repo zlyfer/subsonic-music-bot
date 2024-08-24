@@ -81,7 +81,7 @@ class SubsonicAPI {
   /* ------------ Podcasts ------------ */
   /* ------------ Searching ----------- */
 
-  async search(query, songCount) {
+  async old_search(query, songCount) {
     const searchPromises = this.clients.map(async (client) => {
       try {
         const result = await client.searching.search2({ query, songCount });
@@ -111,7 +111,46 @@ class SubsonicAPI {
     if (songs.length > 0) {
       return songs;
     }
-    console.warn(`[SUBSONIC] No servers returned results for query: ${query}`);
+    console.warn(`[SUBSONIC] No server returned results for query: ${query}`);
+    return [];
+  }
+
+  async search(query, songCount) {
+    const perClientCount = Math.ceil(songCount / this.clients.length);
+    const searchPromises = this.clients.map(async (client) => {
+      try {
+        const result = await client.searching.search2({ query, songCount: perClientCount });
+        if (
+          result &&
+          result.status === "ok" &&
+          result.searchResult2.song &&
+          result.searchResult2.song.length > 0
+        ) {
+          const songs = result.searchResult2.song.map((song) => {
+            song.serverName = client.serverName;
+            return song;
+          });
+          console.info(
+            `[SUBSONIC] Found ${songs.length} result${songs.length == 1 ? "" : "s"} on ${
+              client.serverName
+            } for query: ${query}`
+          );
+          return songs;
+        } else {
+          console.warn(`[SUBSONIC] No results found on ${client.serverName} for query: ${query}`);
+          return [];
+        }
+      } catch (error) {
+        console.error(error);
+        return [];
+      }
+    });
+    const results = await Promise.all(searchPromises);
+    const songs = results.flat().slice(0, songCount);
+    if (songs.length > 0) {
+      return songs;
+    }
+    console.warn(`[SUBSONIC] No server returned results for query: ${query}`);
     return [];
   }
 

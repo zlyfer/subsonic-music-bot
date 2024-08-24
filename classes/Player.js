@@ -21,7 +21,7 @@ class Player {
       this.player.play(resource);
       return true;
     } catch (error) {
-      console.error(error);
+      // console.error(error);
       return false;
     }
   }

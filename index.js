@@ -84,7 +84,7 @@ client.on("ready", () => {
   console.info(` [DISCORD] Logged in as ${client.user.tag}!`);
 
   client.guilds.cache.forEach((guild) => {
-    guilds[guild.id] = new Guild(config);
+    guilds[guild.id] = new Guild(subsonicAPI, config);
   });
 
   client.user.setPresence({
@@ -172,7 +172,7 @@ client.on("interactionCreate", async (interaction) => {
               })
               .catch(async (error) => {
                 console.error(error);
-                await reply.reply("An error occurred while processing your request. [SEARCH]");
+                await reply.reply("An error occurred while processing your request. **(SEARCH)**");
               });
           }
           break;
@@ -206,13 +206,15 @@ client.on("interactionCreate", async (interaction) => {
               );
               return;
             }
-            const { status, song } = guild.skip();
+            const { status, song } = await guild.skip();
             if (status == "play") {
               await interaction.reply(`Song skipped. Now playing: ${genSongInfo(song)}`);
             } else if (status == "empty") {
               await interaction.reply("Song skipped. The queue is empty now.");
             } else {
-              await interaction.reply("An error occurred while processing your request. [SKIP]");
+              await interaction.reply(
+                "An error occurred while processing your request. **(SKIP)**"
+              );
             }
           }
           break;
@@ -340,7 +342,7 @@ client.on("interactionCreate", async (interaction) => {
       }
     } catch (error) {
       console.error(error);
-      await interaction.reply("An error occurred while processing your request. [OPTION]");
+      await interaction.reply("An error occurred while processing your request. **(OPTION)**");
     }
   }
 
@@ -349,14 +351,14 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton()) {
     try {
       if (!guild) {
-        await interaction.reply("An error occurred while processing your request. [GUILD]");
+        await interaction.reply("An error occurred while processing your request. **(GUILD)**");
         return;
       }
 
       const menu = guild.menus[interaction.message.id];
 
       if (!menu) {
-        await interaction.reply("An error occurred while processing your request. [MENU]");
+        await interaction.reply("An error occurred while processing your request. **(MENU)**");
         return;
       }
       switch (interaction.customId) {
@@ -390,7 +392,7 @@ client.on("interactionCreate", async (interaction) => {
           });
           return;
         default:
-          await interaction.reply("An error occurred while processing your request. [PAGE]");
+          await interaction.reply("An error occurred while processing your request. **(PAGE)**");
           return;
       }
 
@@ -420,7 +422,7 @@ client.on("interactionCreate", async (interaction) => {
       return;
     } catch (error) {
       console.error(error);
-      await interaction.reply("An error occurred while processing your request. [PAGE]");
+      await interaction.reply("An error occurred while processing your request. **(PAGE)**");
     }
   }
 
@@ -430,13 +432,13 @@ client.on("interactionCreate", async (interaction) => {
     try {
       if (await checkIfInVoice(channel, interaction)) {
         if (!guild) {
-          await interaction.reply("An error occurred while processing your request. [GUILD]");
+          await interaction.reply("An error occurred while processing your request. **(GUILD)**");
           return;
         }
         const songId = interaction.values[0];
         const song = guild.menus[interaction.message.id].songs.find((song) => song.id === songId);
         if (!song) {
-          await interaction.reply("An error occurred while processing your request. [SONG]");
+          await interaction.reply("An error occurred while processing your request. **(SONG)**");
           return;
         }
         guild.joinVoice(channel);
@@ -447,13 +449,13 @@ client.on("interactionCreate", async (interaction) => {
         } else if (status == "play") {
           await interaction.reply(`Now playing: ${songInfo}`);
         } else {
-          await interaction.reply("An error occurred while processing your request. [SELECT]");
+          await interaction.reply("An error occurred while processing your request. **(SELECT)**");
         }
         return;
       }
     } catch (error) {
       console.error(error);
-      await interaction.reply("An error occurred while processing your request. [SELECT]");
+      await interaction.reply("An error occurred while processing your request. **(SELECT)**");
     }
   }
 });
@@ -463,8 +465,7 @@ async function play(guild, song) {
     guild.queueSong(song);
     return "queue";
   } else {
-    const streamUrl = await subsonicAPI.getStreamUrlById(song);
-    const success = await guild.play(song, streamUrl);
+    const success = await guild.play(song);
     return success ? "play" : "error";
   }
 }

@@ -2,9 +2,10 @@ const Player = require("./Player.js");
 const { joinVoiceChannel, AudioPlayerStatus } = require("@discordjs/voice");
 
 class Guild {
-  constructor(config) {
+  constructor(subsonicAPI, config) {
     this.voice = null;
     this.player = new Player(config);
+    this.subsonicAPI = subsonicAPI;
 
     this.menus = {};
     this.history = [];
@@ -47,8 +48,10 @@ class Guild {
 
   /* ------------- Player ------------- */
 
-  async play(song, streamUrl) {
+  async play(song) {
     if (this.voice) {
+      const streamUrl = await this.subsonicAPI.getStreamUrlById(song);
+
       clearTimeout(this._autoLeave);
       this.currentSong = song;
       this.currentRemaining = song.duration;
@@ -85,7 +88,7 @@ class Guild {
     this.player.stop();
   }
 
-  skip() {
+  async skip() {
     this.stop();
     if (this.queue.length === 0) {
       // this.autoLeave();
@@ -93,7 +96,7 @@ class Guild {
     }
 
     const song = this.queue.shift();
-    const status = this.play(song);
+    const status = await this.play(song);
     return { status: status ? "play" : "error", song };
   }
 
