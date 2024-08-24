@@ -1,0 +1,6 @@
+{
+  "volume": 100,
+  "showProvider": true,
+  "maxPageEntries": 10,
+  "bufferTime": 3000
+}

@@ -1,27 +1,23 @@
 {
   "commands": [
     {
-      "name": "debug",
-      "description": "Joins the voice channel you are in and plays the first starred song."
-    },
-    {
       "name": "panel",
       "description": "Show the control panel."
     },
     {
-      "name": "search",
-      "description": "Search for a song.",
+      "name": "volume",
+      "description": "Change the volume.",
       "options": [
         {
-          "name": "query",
-          "description": "Enter a search query.",
+          "name": "volume",
+          "description": "A number between 0 and 1000. (default: 100)",
           "type": 3,
           "required": true
         },
         {
-          "name": "count",
-          "description": "Total number of search results to show. (default: 50)",
-          "type": 4,
+          "name": "save-to-config",
+          "description": "Save the volume to remember it for the next session.",
+          "type": 5,
           "required": false
         }
       ]
@@ -35,6 +31,24 @@
           "description": "Enter a song title.",
           "type": 3,
           "required": true
+        }
+      ]
+    },
+    {
+      "name": "search",
+      "description": "Search for a song.",
+      "options": [
+        {
+          "name": "query",
+          "description": "Enter a search query.",
+          "type": 3,
+          "required": true
+        },
+        {
+          "name": "count",
+          "description": "Total number of search results to show.",
+          "type": 4,
+          "required": false
         }
       ]
     },
@@ -62,7 +76,6 @@
       "name": "skip",
       "description": "Skip the current song."
     },
-
     {
       "name": "shuffle",
       "description": "Shuffle the current queue."
@@ -150,6 +163,10 @@
     {
       "name": "leave",
       "description": "Leave the voice channel."
+    },
+    {
+      "name": "show-providers",
+      "description": "Show the control panel."
     }
   ]
 }

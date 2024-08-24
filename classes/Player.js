@@ -3,8 +3,10 @@ const { Readable } = require("stream");
 const axios = require("axios");
 
 class Player {
-  constructor() {
+  constructor(config) {
     this.player = createAudioPlayer();
+    this.buffertime = config.bufferTime;
+    this.volume = config.volume / 1000;
   }
 
   async play(url) {
@@ -13,12 +15,14 @@ class Player {
       const resource = createAudioResource(Readable.from(response.data), {
         inlineVolume: true,
         inputType: "arbitrary",
-        bufferingTime: 1000,
+        bufferingTime: this.buffertime,
       });
-      resource.volume.setVolume(0.1);
+      resource.volume.setVolume(this.volume);
       this.player.play(resource);
+      return true;
     } catch (error) {
-      console.error(`${error.message}`, error);
+      console.error(error);
+      return false;
     }
   }
 

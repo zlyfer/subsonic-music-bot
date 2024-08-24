@@ -2,10 +2,9 @@ const Player = require("./Player.js");
 const { joinVoiceChannel, AudioPlayerStatus } = require("@discordjs/voice");
 
 class Guild {
-  constructor(subsonicApi) {
+  constructor(config) {
     this.voice = null;
-    this.player = new Player();
-    this.subsonicApi = subsonicApi;
+    this.player = new Player(config);
 
     this.menus = {};
     this.history = [];
@@ -19,42 +18,49 @@ class Guild {
     /* ------------- Events ------------- */
 
     this.player.player.on(AudioPlayerStatus.Playing, () => {
-      console.info("[AUDIO PLAYER] has started playing!");
+      console.info("  [PLAYER] has started playing!");
     });
 
     this.player.player.on(AudioPlayerStatus.Paused, () => {
-      console.info("[AUDIO PLAYER] has been paused.");
+      console.info("  [PLAYER] has been paused.");
     });
 
     this.player.player.on(AudioPlayerStatus.AutoPaused, () => {
-      console.info("[AUDIO PLAYER] has been automatically paused.");
+      console.info("  [PLAYER] has been automatically paused.");
     });
 
     this.player.player.on(AudioPlayerStatus.Idle, () => {
-      console.info("[AUDIO PLAYER] is idle.");
+      console.info("  [PLAYER] is idle.");
+      if (this._currentRemaining && this.currentRemaining != 0) {
+        console.error("  [SYSTEM] Player seems to have crashed or failed to buffer.");
+      }
     });
 
     this.player.player.on(AudioPlayerStatus.Buffering, () => {
-      console.info("[AUDIO PLAYER] is buffering.");
+      console.warn("  [PLAYER] is buffering.");
     });
 
     this.player.player.on("error", (error) => {
-      console.error("Error playing audio:", error);
+      console.error(error);
     });
   }
 
   /* ------------- Player ------------- */
 
-  async play(song) {
+  async play(song, streamUrl) {
     if (this.voice) {
       clearTimeout(this._autoLeave);
       this.currentSong = song;
       this.currentRemaining = song.duration;
-      const streamUrl = await this.subsonicApi.getStreamUrlById(song.id);
       this.setupCRemainingInterval();
       this.history.unshift(song);
-      this.player.play(streamUrl);
-      this.voice.subscribe(this.player.player);
+      const success = await this.player.play(streamUrl);
+      if (success) {
+        this.voice.subscribe(this.player.player);
+      }
+      return success;
+    } else {
+      return false;
     }
   }
 
@@ -83,12 +89,12 @@ class Guild {
     this.stop();
     if (this.queue.length === 0) {
       // this.autoLeave();
-      return false;
+      return { status: "empty" };
     }
 
     const song = this.queue.shift();
-    this.play(song);
-    return song;
+    const status = this.play(song);
+    return { status: status ? "play" : "error", song };
   }
 
   queueSong(song) {
@@ -123,7 +129,7 @@ class Guild {
       this.leaveVoice(channel);
     }
 
-    console.info("Joining voice channel...");
+    console.info(" [DISCORD] Joining voice channel...");
     this.voice = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
@@ -132,8 +138,8 @@ class Guild {
   }
 
   leaveVoice() {
-    console.info("Leaving voice channel...");
     if (this.voice) {
+      console.info(" [DISCORD] Leaving voice channel...");
       this.voice.destroy();
       this.voice = null;
     }

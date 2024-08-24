@@ -1,17 +1,62 @@
 /* ------------- Imports ------------ */
 
-const { Client, GatewayIntentBits, REST, Routes, ChannelType } = require("discord.js");
+const {
+  Client,
+  GatewayIntentBits,
+  REST,
+  Routes,
+  ChannelType,
+  ActivityType,
+} = require("discord.js");
 const fs = require("fs");
 
 /* ------------- Classes ------------ */
 
-const SubsonicApi = require("./classes/SubsonicApi.js");
+const SubsonicAPI = require("./classes/SubsonicAPI.js");
 const Guild = require("./classes/Guild.js");
 
 /* ------ Config & Credentials ------ */
 
-const creds = JSON.parse(fs.readFileSync("./credentials.json"));
+var creds = JSON.parse(fs.readFileSync("./credentials.json"));
 const { commands } = JSON.parse(fs.readFileSync("./commands.json"));
+if (!fs.existsSync("./config.json")) {
+  console.info("  [SYSTEM] Config file not found. Creating a new one...");
+  fs.copyFileSync("./config.template.json", "./config.json");
+}
+const configTemplate = JSON.parse(fs.readFileSync("./config.template.json"));
+const config = JSON.parse(fs.readFileSync("./config.json"));
+Object.keys(configTemplate).forEach((key) => {
+  if (config[key] === undefined) {
+    console.info(`  [SYSTEM] Config is outdated. Adding missing key: ${key}`);
+    config[key] = configTemplate[key];
+  }
+});
+fs.writeFileSync("./config.json", JSON.stringify(config, null, 2));
+
+/* -------- Convert Cred File ------- */
+
+if (!creds.version || creds.version < 2) {
+  console.info("  [SYSTEM] Found old credentials file. Converting to version 2...");
+  const hostSplit = creds.subsonic.host.split(".");
+  const newCreds = {
+    version: 2,
+    discord: creds.discord,
+    subsonic: [
+      {
+        name: hostSplit[hostSplit.length > 1 ? hostSplit.length - 2 : 0],
+        protocol: creds.subsonic.protocol || "http",
+        host: creds.subsonic.host || "localhost",
+        port: creds.subsonic.port || "80",
+        username: creds.subsonic.username,
+        password: creds.subsonic.password,
+      },
+    ],
+  };
+
+  fs.writeFileSync("./credentials.bak.json", JSON.stringify(creds, null, 2));
+  fs.writeFileSync("./credentials.json", JSON.stringify(newCreds, null, 2));
+  creds = newCreds;
+}
 
 /* ------------ Init Bot ------------ */
 
@@ -21,100 +66,114 @@ const client = new Client({
 
 /* ---------- Init Subsonic --------- */
 
-// this is being used: module.exports = SubsonicApi;
-const subsonicApi = new SubsonicApi(creds.subsonic);
+const subsonicAPI = new SubsonicAPI(creds.subsonic);
 
 /* ------------- Globals ------------ */
 
 const guilds = {};
-// Highest value is 25!
-const MAX_ENTRIES_PER_PAGE = 10;
+const Colors = {
+  yellow: 14595902,
+  green: 3066993,
+  red: 15158332,
+};
 
 /* ----------- Bot Events ----------- */
 
 client.on("ready", () => {
-  console.log(`Logged in as ${client.user.tag}!`);
+  console.info(` [DISCORD] Bot is ready.`);
+  console.info(` [DISCORD] Logged in as ${client.user.tag}!`);
+
+  client.guilds.cache.forEach((guild) => {
+    guilds[guild.id] = new Guild(config);
+  });
+
+  client.user.setPresence({
+    status: "invisible",
+    activities: [{ name: "good music", type: ActivityType.Listening }],
+  });
 });
 
 client.on("interactionCreate", async (interaction) => {
   const channel = interaction.member.voice.channel;
   const guildId = interaction.guildId;
-  let guild = guilds[guildId];
+  const guild = guilds[guildId];
 
   /* ------------ Commands ------------ */
-
   if (interaction.isChatInputCommand()) {
     try {
-      if (!guild) {
-        guild = new Guild(subsonicApi);
-        guilds[guildId] = guild;
-      }
-
-      let type, query, count, customVoiceChannel;
+      let count, customVoiceChannel, query, reply, type;
       switch (interaction.commandName) {
-        // case debug:
-        //   if (await checkIfInVoice(channel, interaction)) {
-        //   }
-        //   break;
-        case "debug":
-          if (await checkIfInVoice(channel, interaction)) {
-            // guild.joinVoice(channel);
-            debug(guild);
-            await interaction.reply(`debugging...`);
-          }
-          break;
         case "panel":
           if (await checkIfInVoice(channel, interaction)) {
             await interaction.reply("Panel is not implemented yet.");
           }
           break;
-        case "search":
-          query = interaction.options.getString("query");
-          count = interaction.options.getInteger("count") || 50;
-          subsonicApi
-            .search(query, count)
-            .then(async (data) => {
-              const songs = data.searchResult3.song;
-              if (!songs) {
-                await interaction.reply("No results found for your search.");
-                return;
-              }
-              const menu = genSearchMenu(query, songs, 0);
-              const reply = await interaction.reply({ ...menu, fetchReply: true });
-              guild.menus[reply.id] = {
-                reply,
-                query,
-                songs,
-                page: 0,
-              };
-            })
-            .catch(async (error) => {
-              console.error(`error:`, error);
-              if (interaction.deferred) {
-                await interaction.reply("An error occurred while searching for songs.");
-              }
-            });
+        case "volume":
+          if (await checkIfInVoice(channel, interaction)) {
+            await interaction.reply("Volume is not implemented yet.");
+          }
           break;
         case "play":
-          if (await checkIfInVoice(channel, interaction)) {
+        case "search":
+          if (
+            (await checkIfInVoice(channel, interaction, interaction.commandName == "play")) ||
+            interaction.commandName == "search"
+          ) {
             query = interaction.options.getString("query");
-            const reply = await interaction.reply(`Searching for: \`${query}\`...`);
-            subsonicApi.search(query, 1).then(async (data) => {
-              if (data.searchResult3.song) {
-                const song = data.searchResult3.song[0];
-                if (data && data.status === "ok" && song) {
-                  guild.joinVoice(channel);
-                  const songInfo = genSongInfo(song);
-                  if (await play(guild, song)) {
-                    await reply.edit(`Added to queue: ${songInfo}`);
-                  } else {
-                    await reply.edit(`Now playing: ${songInfo}`);
-                  }
+            count =
+              interaction.options.getInteger("count") || interaction.commandName == "play"
+                ? 1
+                : 100;
+            subsonicAPI
+              .search(query, count)
+              .then(async (songs) => {
+                if (songs.length === 0) {
+                  await interaction.reply(`Could not find any songs for: \`${query}\``);
+                  return;
                 }
-              } else {
-                await reply.edit(`Could not find any songs for: \`${query}\``);
-              }
-            });
+                if (interaction.commandName == "play") {
+                  const song = songs[0];
+                  if (song) {
+                    guild.joinVoice(channel);
+                    let message = "";
+                    const status = await play(guild, song);
+                    if (status == "queue") {
+                      message += `**Added to queue:**`;
+                    } else if (status == "play") {
+                      message += `**Now playing:**`;
+                    } else {
+                      await interaction.reply(
+                        "An error occurred while processing your request. [PLAY]"
+                      );
+                      return;
+                    }
+                    const fields = genSongFields(guild, [song], "search");
+                    const menu = {
+                      content: message,
+                      embeds: [
+                        {
+                          color: Colors.green,
+                          fields,
+                        },
+                      ],
+                    };
+                    await interaction.reply({ ...menu, fetchReply: true });
+                  }
+                } else if (interaction.commandName == "search") {
+                  const menu = genSearchMenu(guild, query, songs, 0);
+                  reply = await interaction.reply({ ...menu, fetchReply: true });
+                  guild.menus[reply.id] = {
+                    reply,
+                    query,
+                    songs,
+                    page: 0,
+                  };
+                }
+              })
+              .catch(async (error) => {
+                console.error(error);
+                await reply.reply("An error occurred while processing your request. [SEARCH]");
+              });
           }
           break;
         case "pause":
@@ -147,17 +206,14 @@ client.on("interactionCreate", async (interaction) => {
               );
               return;
             }
-            const song = guild.skip();
-            if (song) {
+            const { status, song } = guild.skip();
+            if (status == "play") {
               await interaction.reply(`Song skipped. Now playing: ${genSongInfo(song)}`);
-            } else {
+            } else if (status == "empty") {
               await interaction.reply("Song skipped. The queue is empty now.");
+            } else {
+              await interaction.reply("An error occurred while processing your request. [SKIP]");
             }
-            // else {
-            //   await interaction.reply(
-            //     "The queue is empty. Leaving voice channel in `1 minute` if no songs are added."
-            //   );
-            // }
           }
           break;
         case "shuffle":
@@ -174,7 +230,7 @@ client.on("interactionCreate", async (interaction) => {
             return;
           }
           const menu = genQueueMenu(guild, guild.queue, 0);
-          const reply = await interaction.reply({ ...menu, fetchReply: true });
+          reply = await interaction.reply({ ...menu, fetchReply: true });
           guild.menus[reply.id] = {
             reply,
             songs: guild.queue,
@@ -271,13 +327,20 @@ client.on("interactionCreate", async (interaction) => {
             interaction.reply("I left the voice channel.");
           }
           break;
+        case "show-providers":
+          if (await checkIfInVoice(channel, interaction)) {
+            await interaction.reply("Show providers is not implemented yet.");
+          }
+          break;
         default:
-          await interaction.reply("This command is not implemented yet.");
+          await interaction.reply(
+            "You have entered an invalid command. Try restarting your Discord client."
+          );
           break;
       }
     } catch (error) {
       console.error(error);
-      await interaction.reply("An error occurred while executing this command.");
+      await interaction.reply("An error occurred while processing your request. [OPTION]");
     }
   }
 
@@ -286,14 +349,14 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton()) {
     try {
       if (!guild) {
-        await interaction.reply("An error occurred while processing your request.");
+        await interaction.reply("An error occurred while processing your request. [GUILD]");
         return;
       }
 
       const menu = guild.menus[interaction.message.id];
 
       if (!menu) {
-        await interaction.reply("An error occurred while processing your request.");
+        await interaction.reply("An error occurred while processing your request. [MENU]");
         return;
       }
       switch (interaction.customId) {
@@ -311,15 +374,15 @@ client.on("interactionCreate", async (interaction) => {
           break;
         case "last_s_page":
         case "last_q_page":
-          menu.page = Math.ceil(menu.songs.length / MAX_ENTRIES_PER_PAGE) - 1;
+          menu.page = Math.ceil(menu.songs.length / config.maxPageEntries) - 1;
           break;
         case "middle_s_page":
         case "middle_q_page":
-          menu.page = Math.floor(menu.songs.length / MAX_ENTRIES_PER_PAGE / 2);
+          menu.page = Math.floor(menu.songs.length / config.maxPageEntries / 2);
           break;
         case "clear_queue":
           guild.queue = [];
-          delete guild.menus[interaction.message.id];
+          // delete guild.menus[interaction.message.id];
           await interaction.update({
             content: "The queue has been cleared.",
             components: [],
@@ -327,7 +390,7 @@ client.on("interactionCreate", async (interaction) => {
           });
           return;
         default:
-          await interaction.reply("An error occurred while processing your request.");
+          await interaction.reply("An error occurred while processing your request. [PAGE]");
           return;
       }
 
@@ -339,8 +402,7 @@ client.on("interactionCreate", async (interaction) => {
         "middle_s_page",
       ];
       if (s_pages.includes(interaction.customId)) {
-        guild.menus[interaction.message.id].page = menu.page;
-        const updatedMenu = genSearchMenu(menu.query, menu.songs, menu.page);
+        const updatedMenu = genSearchMenu(guild, menu.query, menu.songs, menu.page);
         await interaction.update(updatedMenu);
       }
 
@@ -352,14 +414,13 @@ client.on("interactionCreate", async (interaction) => {
         "middle_q_page",
       ];
       if (q_pages.includes(interaction.customId)) {
-        guild.menus[interaction.message.id].page = menu.page;
         const updatedMenu = genQueueMenu(guild, menu.songs, menu.page);
         await interaction.update(updatedMenu);
       }
       return;
     } catch (error) {
       console.error(error);
-      await interaction.reply("An error occurred while executing this command.");
+      await interaction.reply("An error occurred while processing your request. [PAGE]");
     }
   }
 
@@ -369,87 +430,63 @@ client.on("interactionCreate", async (interaction) => {
     try {
       if (await checkIfInVoice(channel, interaction)) {
         if (!guild) {
-          await interaction.reply("An error occurred while processing your request.");
+          await interaction.reply("An error occurred while processing your request. [GUILD]");
           return;
         }
         const songId = interaction.values[0];
         const song = guild.menus[interaction.message.id].songs.find((song) => song.id === songId);
         if (!song) {
-          await interaction.reply("An error occurred while processing your request.");
+          await interaction.reply("An error occurred while processing your request. [SONG]");
           return;
         }
         guild.joinVoice(channel);
         const songInfo = genSongInfo(song);
-        if (await play(guild, song)) {
+        const status = await play(guild, song);
+        if (status == "queue") {
           await interaction.reply(`Added to queue: ${songInfo}`);
-        } else {
+        } else if (status == "play") {
           await interaction.reply(`Now playing: ${songInfo}`);
+        } else {
+          await interaction.reply("An error occurred while processing your request. [SELECT]");
         }
         return;
       }
     } catch (error) {
       console.error(error);
-      await interaction.reply("An error occurred while executing this command.");
+      await interaction.reply("An error occurred while processing your request. [SELECT]");
     }
   }
 });
 
-/* -------- Discord Functions ------- */
-
-async function debug(guild) {
-  try {
-    const data = await subsonicApi.getStarred();
-    for (let i = 0; i < 40; i++) {
-      let index = Math.floor(Math.random() * data.starred2.song.length);
-      const song = data.starred2.song[index];
-
-      if (data && data.status === "ok" && song) {
-        guild.queueSong(song);
-        continue;
-        if (guild.currentSong) {
-          guild.queueSong(song);
-        } else {
-          await guild.play(song);
-        }
-      }
-    }
-  } catch (error) {
-    console.error("Error fetching starred songs:", error.message);
-  }
-}
-
 async function play(guild, song) {
   if (guild.currentSong) {
     guild.queueSong(song);
-    return true;
+    return "queue";
   } else {
-    await guild.play(song);
-    return false;
+    const streamUrl = await subsonicAPI.getStreamUrlById(song);
+    const success = await guild.play(song, streamUrl);
+    return success ? "play" : "error";
   }
 }
 
-async function checkIfInVoice(channel, interaction) {
+async function checkIfInVoice(channel, interaction, doReply = true) {
   if (!channel) {
-    await interaction.reply("You need to join a voice channel first!");
+    if (doReply) {
+      await interaction.reply("You need to join a voice channel first!");
+    }
     return false;
   }
   return true;
 }
 
-function genSearchMenu(query, songs, page) {
-  const start = page * MAX_ENTRIES_PER_PAGE;
-  const end = start + MAX_ENTRIES_PER_PAGE;
+function genSearchMenu(guild, query, songs, page) {
+  const start = page * config.maxPageEntries;
+  const end = start + config.maxPageEntries;
   const songShard = songs.slice(start, end);
-  const fields = songShard.map((song) => {
-    return {
-      name: ``,
-      value: `**${limitText(song.title, 30)}** | *${limitText(song.artist, 30)}*
-      *${limitText(song.album, 60)}* | **${s2HMS(song.duration)}**`,
-    };
-  });
+  const fields = genSongFields(guild, songShard, "search", { start });
   const options = songShard.map((song) => {
     return {
-      label: `${limitText(song.title, 25)}`,
+      label: `${limitText(song.title, 30)} (${s2HMS(song.duration)})`,
       value: song.id,
       description: `by ${limitText(song.artist, 50)}`,
     };
@@ -457,14 +494,13 @@ function genSearchMenu(query, songs, page) {
 
   const menu = {
     content: "",
-    tts: false,
     embeds: [
       {
         title: "Results for: " + query,
-        color: 14595902,
+        color: Colors.green,
         fields,
         footer: {
-          text: `Page ${page + 1} of ${Math.ceil(songs.length / MAX_ENTRIES_PER_PAGE)} | ${
+          text: `Page ${page + 1} of ${Math.ceil(songs.length / config.maxPageEntries)} | ${
             songs.length
           } results`,
         },
@@ -476,7 +512,7 @@ function genSearchMenu(query, songs, page) {
         components: genMenuPageButtons(
           "s",
           page,
-          Math.ceil(songs.length / MAX_ENTRIES_PER_PAGE) - 1
+          Math.ceil(songs.length / config.maxPageEntries) - 1
         ),
       },
       {
@@ -499,27 +535,10 @@ function genSearchMenu(query, songs, page) {
 }
 
 function genQueueMenu(guild, songs, page) {
-  const start = page * MAX_ENTRIES_PER_PAGE;
-  const end = start + MAX_ENTRIES_PER_PAGE;
+  const start = page * config.maxPageEntries;
+  const end = start + config.maxPageEntries;
   const songShard = songs.slice(start, end);
-  const calcWaitTime = (songs, index) => {
-    let time = guild.currentRemaining;
-    for (let i = 0; i < index; i++) {
-      time += songs[i].duration;
-    }
-    return time;
-  };
-  const fields = songShard.map((song, index) => {
-    return {
-      name: ``,
-      value: `**${index + start + 1}.** **${limitText(song.title, 30)}** (*${s2HMS(
-        song.duration
-      )}*)\n*${limitText(song.album, 30)}* | **${limitText(song.artist, 30)}**\n${s2HMS(
-        calcWaitTime(songs, index + start)
-      )} left`,
-    };
-  });
-
+  const fields = genSongFields(guild, songShard, "queue", { start });
   const menu = {
     content: `There ${songs.length != 1 ? "are" : "is"} \`${songs.length} song${
       songs.length != 1 ? "s" : ""
@@ -527,16 +546,15 @@ function genQueueMenu(guild, songs, page) {
       songs.reduce((acc, song) => acc + song.duration, 0) + guild.currentRemaining
     )}\`.
     `,
-    tts: false,
     embeds: [
       {
         title: "Queue",
-        color: 14595902,
+        color: Colors.green,
         fields,
         footer: {
-          text: `Page ${page + 1} of ${Math.ceil(songs.length / MAX_ENTRIES_PER_PAGE)} | ${
+          text: `Page ${page + 1} of ${Math.ceil(songs.length / config.maxPageEntries)} | ${
             songs.length
-          } songs in queue`,
+          } song${songs.length == 1 ? "" : "s"} in queue`,
         },
       },
     ],
@@ -546,7 +564,7 @@ function genQueueMenu(guild, songs, page) {
         components: genMenuPageButtons(
           "q",
           page,
-          Math.ceil(songs.length / MAX_ENTRIES_PER_PAGE) - 1
+          Math.ceil(songs.length / config.maxPageEntries) - 1
         ),
       },
       {
@@ -639,10 +657,37 @@ function genMenuPageButtons(type, page, maxPage) {
   return buttons;
 }
 
-/* --------- Other Functions -------- */
-
 function genSongInfo(song) {
   return `\`${song.title}\` (*${s2HMS(song.duration)}*) by \`${song.artist}\``;
+}
+
+function genSongFields(guild, songs, type, options = {}) {
+  const fields = songs.map((song, index) => {
+    var provider = "";
+    if (config.showProvider) {
+      provider = `Provider: \`${song.serverName}\``;
+    }
+    /* --------- Queue Additions -------- */
+    var position = "";
+    var timeUntil = "";
+    if (type == "queue") {
+      position = `**${index + options.start + 1}.**`;
+
+      timeUntil = guild.currentRemaining;
+      for (let i = 0; i < index; i++) {
+        timeUntil += songs[i].duration;
+      }
+      timeUntil = `${s2HMS(timeUntil)} left`;
+    }
+
+    return {
+      name: ``,
+      value: `${position} **${limitText(song.title, 40)}** | (${s2HMS(song.duration)})
+      *${limitText(song.album, 30)}* | *${limitText(song.artist, 30)}*
+      ${provider}${config.showProvider && type == "queue" ? " | " : ""}${timeUntil}`,
+    };
+  });
+  return fields;
 }
 
 function s2HMS(duration) {
@@ -683,7 +728,7 @@ const handleShutdown = async () => {
     guild.leaveVoice();
   });
 
-  console.info("Logging out and shutting down...");
+  console.info(" [DISCORD] Logging out and shutting down...");
   await client.destroy();
   process.exit(0);
 };
@@ -702,11 +747,11 @@ async function main() {
   // });
 
   try {
-    console.info("Attempt: Reload /commands");
+    console.info(" [DISCORD] Attempt: Reload /commands");
 
     await rest.put(Routes.applicationCommands(creds.discord.client_id), { body: commands });
 
-    console.info("Success: Reload /commands");
+    console.info(" [DISCORD] Success: Reload /commands");
   } catch (error) {
     console.error(error);
   }
