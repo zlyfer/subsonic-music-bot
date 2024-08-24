@@ -4,7 +4,6 @@ const md5 = require("md5");
 class SubsonicAPI {
   constructor(credentialsArray) {
     this.clients = [];
-
     const clients = credentialsArray.map(({ username, password, protocol, name, host, port }) => {
       const salt = Math.random().toString(36).substring(2, 15);
       const token = md5(password + salt);
@@ -21,9 +20,7 @@ class SubsonicAPI {
         hostPort: `${host}${port ? `:${port}` : ""}`,
       };
     });
-
     const maxHostPortLength = Math.max(...clients.map(({ hostPort }) => hostPort.length));
-
     const initializeClients = async () => {
       await Promise.all(
         clients.map(async ({ client, hostPort, serverName }) => {
@@ -42,7 +39,6 @@ class SubsonicAPI {
       );
       this.clients.sort((a, b) => a.serverName.localeCompare(b.serverName));
     };
-
     initializeClients();
   }
 
@@ -99,7 +95,6 @@ class SubsonicAPI {
             song.serverName = client.serverName;
             return song;
           });
-
           console.info(`[SUBSONIC] Found results on ${client.serverName} for query: ${query}`);
           return songs;
         } else {
@@ -111,7 +106,6 @@ class SubsonicAPI {
         return [];
       }
     });
-
     const results = await Promise.all(searchPromises);
     const songs = results.flat().slice(0, songCount);
     if (songs.length > 0) {
