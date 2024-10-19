@@ -1,6 +1,6 @@
 # Discord Subsonic Music Bot
 
-#### A music bot that connects Discord and a subsonic server.
+#### A music bot that connects Discord and subsonic servers.
 
 ### Installation
 
@@ -47,4 +47,10 @@ Example (**not actual credentials!**):
     }
   ]
 }
+```
+
+### Start the bot:
+
+```shell
+npm start
 ```
