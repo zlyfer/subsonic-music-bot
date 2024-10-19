@@ -33,12 +33,12 @@ class Guild {
     this.player.player.on(AudioPlayerStatus.Idle, () => {
       console.info("  [PLAYER] is idle.");
       if (this._currentRemaining && this.currentRemaining != 0) {
-        console.error("  [SYSTEM] Player seems to have crashed or failed to buffer.");
+        console.warn("  [SYSTEM] Player seems to have crashed or failed to buffer.");
       }
     });
 
     this.player.player.on(AudioPlayerStatus.Buffering, () => {
-      console.warn("  [PLAYER] is buffering.");
+      console.info("  [PLAYER] is buffering.");
     });
 
     this.player.player.on("error", (error) => {
@@ -51,7 +51,6 @@ class Guild {
   async play(song) {
     if (this.voice) {
       const streamUrl = await this.subsonicAPI.getStreamUrlById(song);
-
       clearTimeout(this._autoLeave);
       this.currentSong = song;
       this.currentRemaining = song.duration;
@@ -82,9 +81,10 @@ class Guild {
   }
 
   stop() {
+    clearInterval(this._currentRemaining);
+    this._currentRemaining = null;
     this.currentSong = null;
     this.currentRemaining = 0;
-    clearInterval(this._currentRemaining);
     this.player.stop();
   }
 

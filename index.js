@@ -53,7 +53,7 @@ if (!creds.version || creds.version < 2) {
     ],
   };
 
-  fs.writeFileSync("./credentials.bak.json", JSON.stringify(creds, null, 2));
+  fs.writeFileSync("./credentials.bak-v1.json", JSON.stringify(creds, null, 2));
   fs.writeFileSync("./credentials.json", JSON.stringify(newCreds, null, 2));
   creds = newCreds;
 }
@@ -135,28 +135,14 @@ client.on("interactionCreate", async (interaction) => {
                   const song = songs[0];
                   if (song) {
                     guild.joinVoice(channel);
-                    let message = "";
                     const status = await play(guild, song);
-                    if (status == "queue") {
-                      message += `**Added to queue:**`;
-                    } else if (status == "play") {
-                      message += `**Now playing:**`;
-                    } else {
+                    if (!status) {
                       await interaction.reply(
-                        "An error occurred while processing your request. [PLAY]"
+                        "An error occurred while processing your request. **[PLAY]**"
                       );
                       return;
                     }
-                    const fields = genSongFields(guild, [song], "search");
-                    const menu = {
-                      content: message,
-                      embeds: [
-                        {
-                          color: Colors.green,
-                          fields,
-                        },
-                      ],
-                    };
+                    const menu = genSongInfoEmbed(guild, song, status);
                     await interaction.reply({ ...menu, fetchReply: true });
                   }
                 } else if (interaction.commandName == "search") {
@@ -172,7 +158,7 @@ client.on("interactionCreate", async (interaction) => {
               })
               .catch(async (error) => {
                 console.error(error);
-                await reply.reply("An error occurred while processing your request. **(SEARCH)**");
+                await reply.reply("An error occurred while processing your request. **[SEARCH]**");
               });
           }
           break;
@@ -208,12 +194,13 @@ client.on("interactionCreate", async (interaction) => {
             }
             const { status, song } = await guild.skip();
             if (status == "play") {
-              await interaction.reply(`Song skipped. Now playing: ${genSongInfo(song)}`);
+              const menu = genSongInfoEmbed(guild, song, status);
+              await interaction.reply({ ...menu, fetchReply: true });
             } else if (status == "empty") {
               await interaction.reply("Song skipped. The queue is empty now.");
             } else {
               await interaction.reply(
-                "An error occurred while processing your request. **(SKIP)**"
+                "An error occurred while processing your request. **[SKIP]**"
               );
             }
           }
@@ -342,7 +329,7 @@ client.on("interactionCreate", async (interaction) => {
       }
     } catch (error) {
       console.error(error);
-      await interaction.reply("An error occurred while processing your request. **(OPTION)**");
+      await interaction.reply("An error occurred while processing your request. **[OPTION]**");
     }
   }
 
@@ -351,14 +338,14 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton()) {
     try {
       if (!guild) {
-        await interaction.reply("An error occurred while processing your request. **(GUILD)**");
+        await interaction.reply("An error occurred while processing your request. **[GUILD]**");
         return;
       }
 
       const menu = guild.menus[interaction.message.id];
 
       if (!menu) {
-        await interaction.reply("An error occurred while processing your request. **(MENU)**");
+        await interaction.reply("An error occurred while processing your request. **[MENU]**");
         return;
       }
       switch (interaction.customId) {
@@ -392,7 +379,7 @@ client.on("interactionCreate", async (interaction) => {
           });
           return;
         default:
-          await interaction.reply("An error occurred while processing your request. **(PAGE)**");
+          await interaction.reply("An error occurred while processing your request. **[PAGE]**");
           return;
       }
 
@@ -422,7 +409,7 @@ client.on("interactionCreate", async (interaction) => {
       return;
     } catch (error) {
       console.error(error);
-      await interaction.reply("An error occurred while processing your request. **(PAGE)**");
+      await interaction.reply("An error occurred while processing your request. **[PAGE]**");
     }
   }
 
@@ -432,30 +419,28 @@ client.on("interactionCreate", async (interaction) => {
     try {
       if (await checkIfInVoice(channel, interaction)) {
         if (!guild) {
-          await interaction.reply("An error occurred while processing your request. **(GUILD)**");
+          await interaction.reply("An error occurred while processing your request. **[GUILD]**");
           return;
         }
         const songId = interaction.values[0];
         const song = guild.menus[interaction.message.id].songs.find((song) => song.id === songId);
         if (!song) {
-          await interaction.reply("An error occurred while processing your request. **(SONG)**");
+          await interaction.reply("An error occurred while processing your request. **[SONG]**");
           return;
         }
         guild.joinVoice(channel);
-        const songInfo = genSongInfo(song);
         const status = await play(guild, song);
-        if (status == "queue") {
-          await interaction.reply(`Added to queue: ${songInfo}`);
-        } else if (status == "play") {
-          await interaction.reply(`Now playing: ${songInfo}`);
-        } else {
-          await interaction.reply("An error occurred while processing your request. **(SELECT)**");
+        if (!status) {
+          await interaction.reply("An error occurred while processing your request. **[SELECT]**");
+          return;
         }
+        const menu = genSongInfoEmbed(guild, song, status);
+        await interaction.reply({ ...menu, fetchReply: true });
         return;
       }
     } catch (error) {
       console.error(error);
-      await interaction.reply("An error occurred while processing your request. **(SELECT)**");
+      await interaction.reply("An error occurred while processing your request. **[SELECT]**");
     }
   }
 });
@@ -479,6 +464,8 @@ async function checkIfInVoice(channel, interaction, doReply = true) {
   }
   return true;
 }
+
+/* ------- Gen Info Functions ------- */
 
 function genSearchMenu(guild, query, songs, page) {
   const start = page * config.maxPageEntries;
@@ -658,38 +645,61 @@ function genMenuPageButtons(type, page, maxPage) {
   return buttons;
 }
 
-function genSongInfo(song) {
-  return `\`${song.title}\` (*${s2HMS(song.duration)}*) by \`${song.artist}\``;
+function genSongInfoEmbed(guild, song, status) {
+  const fields = genSongFields(guild, [song], status == "queue" ? "enqueue" : "search");
+  const menu = {
+    embeds: [
+      {
+        color: status == "queue" ? Colors.yellow : Colors.green,
+        fields,
+        author: {
+          name: status == "queue" ? "Added to queue:" : "Now playing:",
+        },
+      },
+    ],
+  };
+
+  return menu;
 }
 
 function genSongFields(guild, songs, type, options = {}) {
   const fields = songs.map((song, index) => {
-    var provider = "";
-    if (config.showProvider) {
-      provider = `Provider: \`${song.serverName}\``;
-    }
+    const provider = `Provider: \`${song.serverName}\``;
     /* --------- Queue Additions -------- */
     var position = "";
     var timeUntil = "";
+    let timeUntilS = 0;
     if (type == "queue") {
+      timeUntilS = guild.currentRemaining;
       position = `**${index + options.start + 1}.**`;
-
-      timeUntil = guild.currentRemaining;
       for (let i = 0; i < index; i++) {
-        timeUntil += songs[i].duration;
+        timeUntilS += songs[i].duration;
       }
-      timeUntil = `${s2HMS(timeUntil)} left`;
     }
+
+    /* -------- Enqueue Additions ------- */
+    if (type == "enqueue") {
+      timeUntilS = guild.currentRemaining;
+      position = `**${guild.queue.length - (songs.length - (index + 1))}.**`;
+      for (let i = 0; i < guild.queue.length - (songs.length - index); i++) {
+        timeUntilS += guild.queue[i].duration;
+      }
+    }
+    timeUntil = `Plays in \`${s2HMS(timeUntilS)}\``;
 
     return {
       name: ``,
-      value: `${position} **${limitText(song.title, 40)}** | (${s2HMS(song.duration)})
+      value: `${position} **${limitText(song.title, 40)}** | ${s2HMS(song.duration)}
       *${limitText(song.album, 30)}* | *${limitText(song.artist, 30)}*
-      ${provider}${config.showProvider && type == "queue" ? " | " : ""}${timeUntil}`,
+      ${config.showProvider ? `${provider}` : ""}${
+        config.showProvider && (type == "queue" || type == "enqueue") ? " | " : ""
+      }${timeUntilS > 0 ? timeUntil : ""}`,
     };
   });
   return fields;
 }
+
+/* ------- Misc Text Functions ------ */
 
 function s2HMS(duration) {
   let hours = Math.floor(duration / 3600);

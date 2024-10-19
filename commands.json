@@ -166,7 +166,7 @@
     },
     {
       "name": "show-providers",
-      "description": "Show the control panel."
+      "description": "Show the list of providers."
     }
   ]
 }
